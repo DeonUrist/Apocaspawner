@@ -32,7 +32,7 @@ Config: `BepInEx\config\com.denis.apocalypter.apocaspawner.cfg` — `[Keys] Togg
 ## How spawning works
 
 Item prefabs are discovered at runtime (`Resources.FindObjectsOfTypeAll<PlayMakerFSM>()`, assets = objects not in a scene) by their
-`ItemName` / `ID` / `Value` FSMs; vehicles by `RpmGear` / `getFuel` / `CrashDamage`; trailers (`Trailer_Big` / `Trailer_Small`) by
+`ID` FSM (category) plus optional `ItemName` / `Value` — body panels such as `poloska_hood`, `door_car_1_L` or `metal_plate_1` only carry `ID`, they get a name generated from the prefab name; vehicles by `RpmGear` / `getFuel` / `CrashDamage`; trailers (`Trailer_Big` / `Trailer_Small`) by
 `TrailerAttached` (they use the car recipe → `ArrayList_Cars`). Spawn = `Instantiate`, increment the game's
 `itemNameID` counter, name it `<prefab>(Clone)<n>`, and add it to the `NewGO_ArrayList` (`ArrayList_Items` / `ArrayList_Cars`).
-`toolset_*` / `PartAdjusterTools` (static part meshes) are blacklisted.
+`toolset_*` / `PartAdjusterTools` (static part meshes) and the `*explode` effect prefabs are blacklisted.

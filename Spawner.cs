@@ -22,7 +22,7 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "1.2.1";
+        public const string VERSION = "1.3.0";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -100,8 +100,12 @@ namespace Apocaspawner
             ["vehicle"] = "Vehicles",
             ["trailer"] = "Trailers",
             ["engine"] = "Vehicle Parts", ["exhaust"] = "Vehicle Parts", ["forcedinduction"] = "Vehicle Parts", ["gauge"] = "Vehicle Parts",
-            ["gearlever"] = "Vehicle Parts", ["headlight"] = "Vehicle Parts", ["hood"] = "Vehicle Parts", ["radiator"] = "Vehicle Parts",
+            ["gearlever"] = "Vehicle Parts", ["headlight"] = "Vehicle Parts", ["hood"] = "Vehicle Body", ["radiator"] = "Vehicle Parts",
             ["suspension"] = "Vehicle Parts", ["wheel"] = "Vehicle Parts", ["radio"] = "Vehicle Parts",
+            // body panels & armour: ID FSM only, no ItemName (poloska_hood, door_car_1_L, metal_plate_1, ...)
+            ["door"] = "Vehicle Body", ["enginedoor"] = "Vehicle Body", ["trunk"] = "Vehicle Body", ["bumper"] = "Vehicle Body",
+            ["seat"] = "Vehicle Body", ["windshield"] = "Vehicle Body", ["firewall"] = "Vehicle Body", ["frontpart"] = "Vehicle Body",
+            ["rearpart"] = "Vehicle Body", ["roofrack"] = "Vehicle Body", ["steeringwheel"] = "Vehicle Body",
             ["cassette"] = "Cassettes",
             ["attachable"] = "Crates",
             ["carcasse"] = "Carcasses",
@@ -111,10 +115,16 @@ namespace Apocaspawner
         private static readonly Dictionary<string, string> GroupByKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["alcohol_canister"] = "Drugs",
+            ["wire_plate"] = "Vehicle Body",
+        };
+        // prefab-name prefixes that override the group (ID "attachable" is shared with crates/trophies)
+        private static readonly Dictionary<string, string> GroupByPrefix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["metal_plate_"] = "Vehicle Body", ["spikes_"] = "Vehicle Body",
         };
         // prefabs that must never be offered (static car-part meshes with no physics, etc.)
         private static readonly string[] BlacklistPrefixes = { "toolset_" };
-        private static readonly string[] BlacklistCategories = { "PartAdjusterTools" };
+        private static readonly string[] BlacklistCategories = { "PartAdjusterTools", "grenadeexplode", "blastlanceexplode" };   // explosion effect prefabs carry an ID too
 
         // sort priority inside a group (lower = higher up); everything else sorts after these
         private static readonly Dictionary<string, int> KeyPriority = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -126,7 +136,7 @@ namespace Apocaspawner
         public static readonly string[] GroupOrder =
         {
             "Weapons", "Ammo", "Gear", "Drugs", "Food", "Cans & Barrels", "Camp & Farming",
-            "Vehicles", "Trailers", "Vehicle Parts", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
+            "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
         };
 
         public static bool Blacklisted(string key) => BlacklistPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -136,6 +146,7 @@ namespace Apocaspawner
         {
             if (e.Key != null && e.Key.StartsWith("trophy_", StringComparison.OrdinalIgnoreCase)) return "Trophies";
             if (e.Key != null && GroupByKey.TryGetValue(e.Key, out var g)) return g;
+            if (e.Key != null) foreach (var kv in GroupByPrefix) if (e.Key.StartsWith(kv.Key, StringComparison.OrdinalIgnoreCase)) return kv.Value;
             if (e.Category != null && GroupById.TryGetValue(e.Category, out g)) return g;
             return "Other";
         }
@@ -146,23 +157,36 @@ namespace Apocaspawner
         private static readonly Dictionary<string, string> WordFix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["rpm"] = "RPM", ["utv"] = "UTV", ["temp"] = "Temperature", ["speedo"] = "Speedometer", ["gearlever"] = "Gear Lever",
-            ["v6"] = "V6", ["v8"] = "V8",
+            ["v6"] = "V6", ["v8"] = "V8", ["steeringwheel"] = "Steering Wheel", ["roofrack"] = "Roof Rack",
+        };
+        // side suffixes: door_car_1_L -> "Car 1 Left Door"
+        private static readonly Dictionary<string, string> SideWords = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["l"] = "Left", ["r"] = "Right", ["fl"] = "Front Left", ["fr"] = "Front Right", ["rl"] = "Rear Left", ["rr"] = "Rear Right",
         };
         // families whose family word should move to the end: "exhaust_the_six" -> "The Six Exhaust"
-        private static readonly string[] TrailingWords = { "trailer", "exhaust", "gauge", "gearlever", "wheel", "radiator", "headlight", "hood" };
+        private static readonly string[] TrailingWords = { "trailer", "door", "hood", "seat", "exhaust", "gauge", "gearlever", "wheel", "radiator", "headlight" };
 
         private static string Prettify(string raw)
         {
             var words = raw.Split(new[] { '_', ' ' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+            // side suffix comes off first and goes back in front of the family word: door_car_1_L -> "Car 1 Left Door"
+            string side = null;
+            if (words.Count > 1 && SideWords.TryGetValue(words[words.Count - 1], out side)) words.RemoveAt(words.Count - 1);
             // pull trailing numbers off: "rustallion_exhaust_1" -> [rustallion, exhaust] + [1]
             var nums = new List<string>();
             while (words.Count > 1 && words[words.Count - 1].All(char.IsDigit)) { nums.Insert(0, words[words.Count - 1]); words.RemoveAt(words.Count - 1); }
             // family word first -> move it last: "exhaust_the_six" -> "The Six Exhaust", but not "wheel_2_armored"
             if (words.Count > 1 && TrailingWords.Contains(words[0].ToLowerInvariant()) && !words[1].All(char.IsDigit))
             {
-                var fam = words[0]; words.RemoveAt(0); words.Add(fam);
+                var fam = words[0]; words.RemoveAt(0); words.AddRange(nums); nums.Clear(); words.Add(fam);   // door_car_1 -> [car, 1, door]
             }
             words.AddRange(nums);
+            if (side != null)
+            {
+                int fam = words.FindLastIndex(w => TrailingWords.Contains(w.ToLowerInvariant()));
+                if (fam > 0) words.Insert(fam, side); else words.Add(side);
+            }
             for (int i = 0; i < words.Count; i++)
             {
                 var w = words[i];
@@ -229,7 +253,8 @@ namespace Apocaspawner
                 // the game spawns them with the car recipe (TrailerSpawn -> ArrayList_Cars), so treat them as vehicles
                 bool isTrailer = names.Contains("TrailerAttached");
                 bool isVehicle = isTrailer || names.Contains("RpmGear") || names.Contains("getFuel") || names.Contains("CrashDamage");
-                bool isItem = names.Contains("ItemName") && names.Contains("ID");
+                // items = anything with an ID FSM; ItemName is optional (body panels/armour plates only have ID + ES3Prefab)
+                bool isItem = names.Contains("ID");
                 if (!isVehicle && !isItem) continue;
                 if (go.transform.parent != null && !isVehicle && !isAsset) continue; // scene items nested in something: skip (parts, UI)
                 if (isVehicle && go.transform.parent != null) continue;              // vehicle parts carry vehicle-ish FSMs too
@@ -281,7 +306,7 @@ namespace Apocaspawner
             _entries = byKey.Values
                 .OrderBy(e => { var i = Array.IndexOf(GroupOrder, e.Group); return i < 0 ? 999 : i; })
                 .ThenBy(PriorityFor)
-                .ThenBy(e => e.Group == "Vehicle Parts" ? e.Category : "", StringComparer.OrdinalIgnoreCase)   // parts: by type first
+                .ThenBy(e => e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" ? e.Category : "", StringComparer.OrdinalIgnoreCase)   // parts: by type first
                 .ThenBy(e => e.Display, StringComparer.OrdinalIgnoreCase).ToList();
             SpawnerPlugin.Log.LogInfo($"Catalog: {_entries.Count} entries, categories: {string.Join(", ", _entries.GroupBy(e => e.Category).Select(g => $"{g.Key}({g.Count()})"))}");
             return _entries;
