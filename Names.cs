@@ -12,9 +12,10 @@ namespace Apocaspawner
     //    [Names]
     //    9mm_borz_smg = Borz SMG (9mm)
     //    exhaust_the_six = The Six Exhaust
-    //    some_new_item =                      <- empty = not named yet, menu shows the internal name
+    //    Trailer_Big = Big Trailer
     //
-    //  Items the game adds later are appended automatically with an empty value.
+    //  Items the game adds later are appended automatically with a generated name (from the game's ItemName
+    //  or the prefab name); an empty value is filled in with that generated name on the next run.
     // =====================================================================
     internal static class NameTable
     {
@@ -28,28 +29,30 @@ namespace Apocaspawner
         {
             _cfg = cfg;
             _entries.Clear();
-            // Bootstrap rule: if the config has never had a [Names] section, fill it with preset names;
-            // afterwards, unknown items are added with an empty value.
             try { _hadNamesSection = File.Exists(cfg.ConfigFilePath) && File.ReadAllText(cfg.ConfigFilePath).Contains("[" + Section + "]"); }
             catch { _hadNamesSection = false; }
             SpawnerPlugin.Log.LogInfo(_hadNamesSection ? "cfg: [Names] section found" : "cfg: no [Names] section yet, presets will be written");
         }
 
-        /// Display name for a prefab key; registers unknown keys in the config.
+        /// Display name for a prefab key; registers unknown keys in the config with the generated preset name.
         public static string Resolve(string key, string preset)
         {
+            if (string.IsNullOrEmpty(preset)) preset = key;
             if (!_entries.TryGetValue(key, out var entry))
             {
-                var initial = _hadNamesSection ? "" : preset;
                 bool wasSaving = _cfg.SaveOnConfigSet;
                 _cfg.SaveOnConfigSet = false;
-                try { entry = _cfg.Bind(Section, Sanitize(key), initial, "Displayed name; leave empty to show the internal name"); }
+                try
+                {
+                    entry = _cfg.Bind(Section, Sanitize(key), preset, "Displayed name (empty = regenerated on next run)");
+                    if (string.IsNullOrEmpty(entry.Value)) entry.Value = preset;   // fill in entries left empty by older versions
+                }
                 finally { _cfg.SaveOnConfigSet = wasSaving; }
                 _entries[key] = entry;
                 _dirty = true;
             }
             var v = entry.Value;
-            return string.IsNullOrEmpty(v) ? key : v;
+            return string.IsNullOrEmpty(v) ? preset : v;
         }
 
         public static void SaveIfDirty()

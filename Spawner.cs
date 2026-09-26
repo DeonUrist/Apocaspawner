@@ -22,7 +22,7 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "1.1.1";
+        public const string VERSION = "1.2.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -98,6 +98,7 @@ namespace Apocaspawner
             ["portable_dew_collector"] = "Camp & Farming", ["portable_gasoline_stove"] = "Camp & Farming", ["bedroll"] = "Camp & Farming",
             ["can_light"] = "Camp & Farming",
             ["vehicle"] = "Vehicles",
+            ["trailer"] = "Trailers",
             ["engine"] = "Vehicle Parts", ["exhaust"] = "Vehicle Parts", ["forcedinduction"] = "Vehicle Parts", ["gauge"] = "Vehicle Parts",
             ["gearlever"] = "Vehicle Parts", ["headlight"] = "Vehicle Parts", ["hood"] = "Vehicle Parts", ["radiator"] = "Vehicle Parts",
             ["suspension"] = "Vehicle Parts", ["wheel"] = "Vehicle Parts", ["radio"] = "Vehicle Parts",
@@ -125,7 +126,7 @@ namespace Apocaspawner
         public static readonly string[] GroupOrder =
         {
             "Weapons", "Ammo", "Gear", "Drugs", "Food", "Cans & Barrels", "Camp & Farming",
-            "Vehicles", "Vehicle Parts", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
+            "Vehicles", "Trailers", "Vehicle Parts", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
         };
 
         public static bool Blacklisted(string key) => BlacklistPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
@@ -148,7 +149,7 @@ namespace Apocaspawner
             ["v6"] = "V6", ["v8"] = "V8",
         };
         // families whose family word should move to the end: "exhaust_the_six" -> "The Six Exhaust"
-        private static readonly string[] TrailingWords = { "exhaust", "gauge", "gearlever", "wheel", "radiator", "headlight", "hood" };
+        private static readonly string[] TrailingWords = { "trailer", "exhaust", "gauge", "gearlever", "wheel", "radiator", "headlight", "hood" };
 
         private static string Prettify(string raw)
         {
@@ -224,7 +225,10 @@ namespace Apocaspawner
                 bool isAsset = !go.scene.IsValid();
                 var names = new HashSet<string>(fsms.Select(f => f.FsmName));
 
-                bool isVehicle = names.Contains("RpmGear") || names.Contains("getFuel") || names.Contains("CrashDamage");
+                // trailers (Trailer_Big/Trailer_Small) carry none of the car FSMs, only TrailerAttached/TireWear/DistanceKinematic;
+                // the game spawns them with the car recipe (TrailerSpawn -> ArrayList_Cars), so treat them as vehicles
+                bool isTrailer = names.Contains("TrailerAttached");
+                bool isVehicle = isTrailer || names.Contains("RpmGear") || names.Contains("getFuel") || names.Contains("CrashDamage");
                 bool isItem = names.Contains("ItemName") && names.Contains("ID");
                 if (!isVehicle && !isItem) continue;
                 if (go.transform.parent != null && !isVehicle && !isAsset) continue; // scene items nested in something: skip (parts, UI)
@@ -235,7 +239,7 @@ namespace Apocaspawner
 
                 var e = new Entry { Key = key, Prefab = go, IsAsset = isAsset, IsVehicle = isVehicle };
                 var itemName = fsms.FirstOrDefault(f => f.FsmName == "ItemName")?.FsmVariables.GetFsmString("ItemName")?.Value;
-                e.Category = isVehicle ? "vehicle" : (fsms.FirstOrDefault(f => f.FsmName == "ID")?.FsmVariables.GetFsmString("ID")?.Value ?? "misc");
+                e.Category = isTrailer ? "trailer" : isVehicle ? "vehicle" : (fsms.FirstOrDefault(f => f.FsmName == "ID")?.FsmVariables.GetFsmString("ID")?.Value ?? "misc");
                 if (string.IsNullOrEmpty(e.Category)) e.Category = "misc";
                 if (BlacklistedCategory(e.Category)) continue;
                 e.Display = NameTable.Resolve(e.Key, LabelFor(e, itemName));
