@@ -12,7 +12,7 @@ Spawned objects are registered the same way the game does it, so they save and l
 - Friendly item names in the `[Names]` section of the config (presets written on first run; new prefabs are appended empty and
   shown by their internal name until you fill them in).
 - Uses the shared GUI (theme, input blocking, pause-menu detection) from [Apocasetter](../Apocasetter).
-- ESC closes the window; the pause menu shows a `F4 - OPEN ITEM SPAWNER` hint.
+- ESC closes the window. The mod shows up in the Apocasetter MODS menu (hotkey, distances, item names).
 
 ## Installation
 

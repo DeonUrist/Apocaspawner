@@ -22,7 +22,7 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "1.1.0";
+        public const string VERSION = "1.1.1";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -365,7 +365,6 @@ namespace Apocaspawner
             else if (_open && SpawnerPlugin.Pressed(Key.Escape)) Toggle();
         }
 
-        private static bool GamePaused => GameMenu.Paused;
 
         private void LateUpdate()
         {
@@ -381,32 +380,12 @@ namespace Apocaspawner
             else { Cursor.lockState = _prevLock; Cursor.visible = _prevVisible; _unblockNextFrame = true; } // keep blocking one more frame so the closing keypress isn't seen by the game
         }
 
-        private GUIStyle _hintStyle;
-
         private void OnGUI()
         {
-            if (!_open)
-            {
-                if (Catalog.InGame && GamePaused) DrawPauseHint();
-                return;
-            }
+            if (!_open) return;
             Theme.Apply();
             _win = GUILayout.Window(0xA90CB, _win, Draw, "",
                 GUILayout.Width(640), GUILayout.Height(620));
-        }
-
-        private void DrawPauseHint()
-        {
-            Theme.Apply();
-            if (_hintStyle == null || _hintStyle.font != GUI.skin.font)
-                _hintStyle = new GUIStyle(GUI.skin.label) { fontSize = 30, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            var text = $"{SpawnerPlugin.MenuKey} - OPEN ITEM SPAWNER".ToUpperInvariant();
-            var r = new Rect(0, Screen.height - 90, Screen.width, 44);
-            var c = Color.white;
-            _hintStyle.normal.textColor = new Color(0, 0, 0, 0.8f);
-            GUI.Label(new Rect(r.x + 2, r.y + 2, r.width, r.height), text, _hintStyle);   // shadow
-            _hintStyle.normal.textColor = c;
-            GUI.Label(r, text, _hintStyle);
         }
 
         private void Draw(int id)
