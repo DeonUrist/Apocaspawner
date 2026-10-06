@@ -22,12 +22,13 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "1.3.1";
+        public const string VERSION = "2.0.4";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
         internal static Key MenuKey => MenuKeyEntry.Value;
-        internal static ConfigEntry<float> ItemDistance, VehicleDistance;
+        internal static ConfigEntry<Key> SpawnKeyEntry;
+        internal static ConfigEntry<float> SpawnDistance;
         private static GameObject _runner;
 
         private void Awake()
@@ -35,8 +36,10 @@ namespace Apocaspawner
             Log = Logger;
             Config.Bind("General", "Apocasetter", true, "Show this mod in the Apocasetter Mods menu");
             MenuKeyEntry = Config.Bind("Keys", "ToggleMenu", Key.F4, "Open/close the spawner window (Unity Input System key name, e.g. F4, Insert, Backquote)");
-            ItemDistance = Config.Bind("Spawn", "ItemDistance", 2.5f, "Metres in front of the player to drop items");
-            VehicleDistance = Config.Bind("Spawn", "VehicleDistance", 8f, "Metres in front of the player to place vehicles");
+            SpawnKeyEntry = Config.Bind("Keys", "SpawnSelected", Key.Enter, "Spawn the selected item or NPC while the menu is open and no text field is being edited.");
+            SpawnDistance = Config.Bind("Spawn", "Distance", 10f, new ConfigDescription("Global spawn distance in metres for items, vehicles and NPCs.", new AcceptableValueRange<float>(0.5f, 1000f)));
+            PreviewCache.Initialize();
+            InputShield.Install();
 
             SceneManager.sceneLoaded += (s, m) => { Catalog.Invalidate(); EnsureRunner("scene " + s.name); };
             NameTable.Init(Config);
@@ -69,6 +72,7 @@ namespace Apocaspawner
         public GameObject Prefab;   // asset (not in scene) when available
         public bool IsAsset;
         public bool IsVehicle;
+        public bool IsNpc;
         public PlayMakerFSM DevSpawnFsm; // Debug_Canvas button FSM, if this came from there
         public int Value;
     }
@@ -79,7 +83,7 @@ namespace Apocaspawner
         private static GameObject _player;
         private static readonly Regex CloneRx = new Regex(@"\(Clone\)\d*$|\s\(\d+\)$");
 
-        public static void Invalidate() { _entries = null; _player = null; GameMenu.Invalidate(); }
+        public static void Invalidate() { _entries = null; _player = null; GameMenu.Invalidate(); Parameters.Invalidate(); }
 
         // ---- logical grouping of the game's ID strings ----
         private static readonly Dictionary<string, string> GroupById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -139,8 +143,11 @@ namespace Apocaspawner
             "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
         };
 
-        public static bool Blacklisted(string key) => BlacklistPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        public static bool Blacklisted(string key) => NpcCatalog.IsBackup(key) || BlacklistPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
         public static bool BlacklistedCategory(string cat) => cat != null && BlacklistCategories.Any(c => string.Equals(c, cat, StringComparison.OrdinalIgnoreCase));
+        internal static bool IsVehicleTool(Entry e) => !e.IsNpc && (string.Equals(e.Category, "Toolbox", StringComparison.OrdinalIgnoreCase) || string.Equals(e.Category, "Repairbox", StringComparison.OrdinalIgnoreCase));
+        internal static bool IsVehicleEntry(Entry e) => !e.IsNpc && (e.IsVehicle || e.Group == "Vehicles" || e.Group == "Trailers" || e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" || IsVehicleTool(e));
+        internal static string DisplayGroup(Entry e) => IsVehicleTool(e) ? "Tools" : e.Group;
 
         public static string GroupFor(Entry e)
         {
@@ -254,17 +261,19 @@ namespace Apocaspawner
                 bool isTrailer = names.Contains("TrailerAttached");
                 bool isVehicle = isTrailer || names.Contains("RpmGear") || names.Contains("getFuel") || names.Contains("CrashDamage");
                 // items = anything with an ID FSM; ItemName is optional (body panels/armour plates only have ID + ES3Prefab)
+                bool isNpc = NpcCatalog.IsNpc(go, names);
                 bool isItem = names.Contains("ID");
-                if (!isVehicle && !isItem) continue;
-                if (go.transform.parent != null && !isVehicle && !isAsset) continue; // scene items nested in something: skip (parts, UI)
+                if (!isVehicle && !isItem && !isNpc) continue;
+                if (go.transform.parent != null && !isVehicle && !isNpc && !isAsset) continue; // scene items nested in something: skip (parts, UI)
+                if (isNpc && NpcCatalog.NestedActor(go)) continue;
                 if (isVehicle && go.transform.parent != null) continue;              // vehicle parts carry vehicle-ish FSMs too
 
                 var key = BaseName(go.name);
                 if (string.IsNullOrEmpty(key) || Blacklisted(key)) continue;
 
-                var e = new Entry { Key = key, Prefab = go, IsAsset = isAsset, IsVehicle = isVehicle };
+                var e = new Entry { Key = key, Prefab = go, IsAsset = isAsset, IsVehicle = isVehicle, IsNpc = isNpc };
                 var itemName = fsms.FirstOrDefault(f => f.FsmName == "ItemName")?.FsmVariables.GetFsmString("ItemName")?.Value;
-                e.Category = isTrailer ? "trailer" : isVehicle ? "vehicle" : (fsms.FirstOrDefault(f => f.FsmName == "ID")?.FsmVariables.GetFsmString("ID")?.Value ?? "misc");
+                e.Category = isNpc ? go.tag : isTrailer ? "trailer" : isVehicle ? "vehicle" : (fsms.FirstOrDefault(f => f.FsmName == "ID")?.FsmVariables.GetFsmString("ID")?.Value ?? "misc");
                 if (string.IsNullOrEmpty(e.Category)) e.Category = "misc";
                 if (BlacklistedCategory(e.Category)) continue;
                 e.Display = NameTable.Resolve(e.Key, LabelFor(e, itemName));
@@ -301,7 +310,8 @@ namespace Apocaspawner
                 };
             }
 
-            foreach (var e in byKey.Values) e.Group = GroupFor(e);
+            NpcCatalog.AddRegistered(byKey);
+            foreach (var e in byKey.Values) e.Group = e.IsNpc ? NpcCatalog.Faction(e.Category) : GroupFor(e);
             NameTable.SaveIfDirty();
             _entries = byKey.Values
                 .OrderBy(e => { var i = Array.IndexOf(GroupOrder, e.Group); return i < 0 ? 999 : i; })
@@ -323,7 +333,8 @@ namespace Apocaspawner
 
         public static void Spawn(Entry e, int count = 1)
         {
-            if (e.DevSpawnFsm != null && UseDevSpawner && e.DevSpawnFsm.isActiveAndEnabled)
+            // The developer buttons use their own hard-coded positions. A usable prefab always takes the global-distance path.
+            if (e.Prefab == null && e.DevSpawnFsm != null && UseDevSpawner && e.DevSpawnFsm.isActiveAndEnabled)
             {
                 for (int i = 0; i < count; i++) e.DevSpawnFsm.SetState("clicked");
                 SpawnerPlugin.Log.LogInfo($"Spawned {count}x {e.Key} via dev spawn button");
@@ -337,14 +348,21 @@ namespace Apocaspawner
             var fwd = Vector3.ProjectOnPlane(t.forward, Vector3.up).normalized;
             if (fwd.sqrMagnitude < 0.01f) fwd = Vector3.forward;
 
+            count = Mathf.Clamp(count, 1, 50);
+            var size = e.IsVehicle || e.IsNpc ? NpcCatalog.ModelSize(e.Prefab) : Vector3.zero;
+            float spacing = e.IsVehicle || e.IsNpc ? Mathf.Max(1.5f, Mathf.Max(size.x, size.z) + .5f) : .4f;
+            var side = Vector3.Cross(Vector3.up, fwd);
+            var positions = new Vector3[count];
             for (int i = 0; i < count; i++)
             {
-                float dist = e.IsVehicle ? SpawnerPlugin.VehicleDistance.Value : SpawnerPlugin.ItemDistance.Value;
-                var pos = t.position + fwd * dist + Vector3.up * (e.IsVehicle ? 1.0f : 1.2f) + Vector3.right * (i * 0.4f);
-                var rot = e.IsVehicle ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation;
-                var go = UnityEngine.Object.Instantiate(e.Prefab, pos, rot);
-                go.SetActive(true);
-                Register(go, e);
+                float dist = SpawnerPlugin.SpawnDistance.Value;
+                var pos = t.position + fwd * dist + side * ((i - (count - 1) * .5f) * spacing);
+                positions[i] = Placement.Resolve(e, pos);
+            }
+            for (int i = 0; i < count; i++)
+            {
+                var rot = e.IsVehicle || e.IsNpc ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation;
+                Placement.Create(e, positions[i], rot, go => Register(go, e));
             }
         }
 
@@ -355,7 +373,7 @@ namespace Apocaspawner
             var counterGo = GameObject.Find("itemNameID");
             var counter = counterGo?.GetComponents<PlayMakerFSM>().FirstOrDefault(f => f.FsmName == "itemNameID")?.FsmVariables.GetFsmInt("intName");
             if (counter != null) { counter.Value += 1; id = counter.Value; }
-            go.name = e.Prefab.name + "(Clone)" + (id >= 0 ? id.ToString() : "");
+            go.name = e.Key + "(Clone)" + (id >= 0 ? id.ToString() : "");
 
             var reg = GameObject.Find("NewGO_ArrayList");
             PlayMakerArrayListProxy list = null;
@@ -371,115 +389,4 @@ namespace Apocaspawner
         }
     }
 
-    // =====================================================================
-    //  UI
-    // =====================================================================
-    internal class SpawnerUI : MonoBehaviour
-    {
-        private bool _open;
-        private Rect _win = new Rect(40, 40, 640, 620);
-        private Vector2 _catScroll, _listScroll;
-        private string _search = "";
-        private string _category = "all";
-        private int _count = 1;
-        private CursorLockMode _prevLock;
-        private bool _prevVisible;
-
-        private bool _unblockNextFrame;
-
-        private void Update()
-        {
-            if (_unblockNextFrame) { _unblockNextFrame = false; if (!_open) InputBlocker.Set(false); }
-            if (SpawnerPlugin.Pressed(SpawnerPlugin.MenuKey)) Toggle();
-            else if (_open && SpawnerPlugin.Pressed(Key.Escape)) Toggle();
-        }
-
-
-        private void LateUpdate()
-        {
-            if (!_open) return;
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
-
-        private void Toggle()
-        {
-            _open = !_open;
-            if (_open) { _prevLock = Cursor.lockState; _prevVisible = Cursor.visible; InputBlocker.Set(true); }
-            else { Cursor.lockState = _prevLock; Cursor.visible = _prevVisible; _unblockNextFrame = true; } // keep blocking one more frame so the closing keypress isn't seen by the game
-        }
-
-        private void OnGUI()
-        {
-            if (!_open) return;
-            Theme.Apply();
-            _win = GUILayout.Window(0xA90CB, _win, Draw, "",
-                GUILayout.Width(640), GUILayout.Height(620));
-        }
-
-        private void Draw(int id)
-        {
-            // title bar: bold title top-left, close control top-right, both on the same row
-            var titleStyle = Theme.Header ?? new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold };
-            const float titleY = 8f;
-            var titleText = $"Apocaspawner {SpawnerPlugin.VERSION}";
-            var titleSize = titleStyle.CalcSize(new GUIContent(titleText));
-            GUI.Label(new Rect(14, titleY, titleSize.x + 4, titleSize.y + 2), titleText, titleStyle);
-            var closeText = $"[{SpawnerPlugin.MenuKey}] Close";
-            var closeSize = titleStyle.CalcSize(new GUIContent(closeText));
-            if (GUI.Button(new Rect(_win.width - closeSize.x - 14, titleY, closeSize.x + 4, closeSize.y + 2), closeText, titleStyle)) Toggle();
-
-            if (!Catalog.InGame) { GUILayout.Label("Load into the game first."); GUI.DragWindow(); return; }
-
-            var entries = Catalog.Entries();
-            var cats = entries.GroupBy(e => e.Group).Select(g => new { Name = g.Key, Count = g.Count() })
-                              .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ToList();
-
-            // ---- top bar ----
-            GUILayout.BeginHorizontal();
-            GUILayout.Label("Search", GUILayout.Width(50));
-            _search = GUILayout.TextField(_search, GUILayout.Width(260));
-            GUILayout.Space(10);
-            GUILayout.Label("Count", GUILayout.Width(44));
-            int.TryParse(GUILayout.TextField(_count.ToString(), GUILayout.Width(36)), out _count);
-            _count = Mathf.Clamp(_count, 1, 50);
-            if (GUILayout.Button("-", GUILayout.Width(24))) _count = Mathf.Max(1, _count - 1);
-            if (GUILayout.Button("+", GUILayout.Width(24))) _count = Mathf.Min(50, _count + 1);
-            GUILayout.FlexibleSpace();
-            GUILayout.EndHorizontal();
-            GUILayout.Space(4);
-
-            // ---- two panes ----
-            GUILayout.BeginHorizontal();
-
-            // left: categories
-            var catStyle = Theme.Category ?? GUI.skin.button;
-            GUILayout.BeginVertical(Theme.LeftPanel ?? GUI.skin.box, GUILayout.Width(190));
-            _catScroll = GUILayout.BeginScrollView(_catScroll);
-            if (GUILayout.Toggle(_category == "all", $" All ({entries.Count})", catStyle)) _category = "all";
-            foreach (var c in cats)
-                if (GUILayout.Toggle(_category == c.Name, $" {c.Name} ({c.Count})", catStyle)) _category = c.Name;
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-
-            // right: entries
-            GUILayout.BeginVertical(Theme.RightPanel ?? GUI.skin.box);
-            _listScroll = GUILayout.BeginScrollView(_listScroll);
-            var s = _search.Trim().ToLowerInvariant();
-            int shown = 0;
-            foreach (var e in entries)
-            {
-                if (_category != "all" && e.Group != _category) continue;
-                if (s.Length > 0 && !e.Display.ToLowerInvariant().Contains(s) && !e.Key.ToLowerInvariant().Contains(s) && !e.Category.ToLowerInvariant().Contains(s)) continue;
-                shown++;
-                if (GUILayout.Button(e.Display)) Spawner.Spawn(e, _count);
-            }
-            if (shown == 0) GUILayout.Label("Nothing matches.");
-            GUILayout.EndScrollView();
-            GUILayout.EndVertical();
-
-            GUILayout.EndHorizontal();
-            GUI.DragWindow(new Rect(0, 0, 10000, 20));
-        }
-    }
 }
