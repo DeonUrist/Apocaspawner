@@ -58,6 +58,8 @@ namespace Apocaspawner
             {
                 // Keep gameplay callbacks dormant until position, physics and the save registration have been prepared.
                 clone = UnityEngine.Object.Instantiate(entry.Prefab, position, rotation, staging.transform);
+                Replacements.Apply(entry, clone);
+                if (entry.Replacement != null) clone.transform.position += Vector3.up * (Bottom(entry.Prefab) - Bottom(clone));
                 if (entry.IsNpc)
                 {
                     var body = clone.GetComponent<Rigidbody>();
@@ -68,6 +70,7 @@ namespace Apocaspawner
                     }
                 }
                 register(clone); clone.SetActive(true); clone.transform.SetParent(null, true);
+                Replacements.Complete(entry, clone);
                 if (entry.IsNpc)
                 {
                     Physics.SyncTransforms();

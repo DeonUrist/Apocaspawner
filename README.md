@@ -11,6 +11,7 @@ Both keys are configurable. Spawning uses the game's naming counter and save-tra
 - Search text is retained when switching tabs. Editable field text is centered horizontally and vertically.
 - VEHICLES contains chassis, trailers, vehicle parts, body elements, toolboxes and repair boxes. ITEMS contains the remaining inventory items.
 - NPC factions: **Animals, Mutants, Coyotes, Scrapyard, Other**. Unknown/mod-added factions go in Other. BACKUP variants are hidden; corpses remain in ITEMS.
+- With Women of Wasteland loaded, **Gungirl** and **Shoota** are explicit entries under NPC / Scrapyard, even before a female NPC has appeared in the world. Selection uses the mod's female appearance for the preview; spawning applies its conversion before activation and refreshes voice setup after activation. Explicit selection is independent of the random FemalePopulation percentage.
 - Clicking a name selects it without spawning. World collider mouse callbacks, state-entry mouse picking and button polling are blocked until the window closes and the closing click is released.
 - NPCs and vehicles spawn upright on loaded ground; multiple objects use size-aware spacing. NPC placement accounts for the full body collider beneath the prefab pivot and prepares registration/physics before activation. Ground NPCs use continuous collision detection. If ground is unavailable, spawning is refused rather than dropping them into empty space.
 - Global spawn distance defaults to **10 m**, shared across all tabs. Quantity defaults to **1**, with direct entry and **− / +** controls (1–50). Footer controls sit in an inset bordered panel matching the main panels.
@@ -61,13 +62,17 @@ All calls must run on Unity's main thread. `Apocaspawner.Api.ContractVersion` an
 
 ```csharp
 Api.RegisterNpc(customPrefab, "Custom guard", "NewFaction"); // appears under NPC / Other
+Api.RegisterNpcReplacement("MyVariant", "Bodyguard", ApplyVariant,
+    convertPreview: ApplyVariantVisuals, afterSpawn: InitializeVariantVoice);
 Api.RegisterParameterProvider("MyMod", (prefab, isNpc) => new[] {
     new SpawnParameter("Effective range", "125", "m", "Combat", "MyMod")
 });
-// Use UnregisterNpc / UnregisterParameterProvider when unloading.
+// Use UnregisterNpc / UnregisterNpcReplacement / UnregisterParameterProvider when unloading.
 ```
 
 Provider rows have Section, Label, Value, Unit and Source. Return only rows with available values; providers are isolated so a failing optional mod cannot break the window. Custom NPC prefabs should supply their own ES3/save support if they need persistence.
+
+Replacement mods can use `RegisterNpcReplacement` when their NPC is a converted base prefab rather than a new asset. `convert` receives an inactive gameplay clone and must return true on success. `convertPreview` receives only cloned transforms, skeletons and mesh renderers, with private copies of the original materials; it must not require gameplay components. If omitted, the main converter is used for both. Optional `afterSpawn` runs after activation for voice/FSM setup. Faction and parameters inherit the base NPC, with an optional faction override for catalog grouping. Register the name that your mod recognizes during save restoration. These APIs do not automatically infer arbitrary third-party conversions; such mods must register their replacement metadata. Women of Wasteland is integrated automatically through optional reflection and remains an optional dependency.
 
 `PreviewCache.GetOrCreate(prefab)` returns a shared Texture2D, rendering only on a cache miss. `TryGetCached(prefab, out texture)`, `GetKey(prefab)`, and `GetFilePath(prefab)` let other mod functions reuse the same preview. The cache owns returned textures; do not destroy or modify them. Resident textures may be evicted, so request them again before later reuse.
 

@@ -57,7 +57,7 @@ namespace Apocaspawner
             {
                 _nextParameters = Time.unscaledTime + 1;
                 _parameters = Parameters.Read(_selected);
-                if (_preview == null) _preview = PreviewCache.GetOrCreate(_selected.Prefab);
+                if (_preview == null) _preview = PreviewCache.GetOrCreate(Replacements.PreviewModel(_selected));
             }
         }
         private void LateUpdate()
@@ -84,7 +84,7 @@ namespace Apocaspawner
         {
             _selected = entry; _selections[Tab] = entry?.Key ?? ""; _parameterScroll = Vector2.zero;
             _parameters = entry == null ? new List<SpawnParameter>() : Parameters.Read(entry);
-            _preview = entry == null ? null : PreviewCache.GetOrCreate(entry.Prefab);
+            _preview = entry == null ? null : PreviewCache.GetOrCreate(Replacements.PreviewModel(entry));
             _nextParameters = Time.unscaledTime + 1;
         }
         private void SwitchTab(int tab)

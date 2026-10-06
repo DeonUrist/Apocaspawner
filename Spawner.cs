@@ -18,11 +18,12 @@ namespace Apocaspawner
 {
     [BepInPlugin(GUID, NAME, VERSION)]
     [BepInDependency(Apocasetter.Plugin.GUID, BepInDependency.DependencyFlags.HardDependency)]
+    [BepInDependency("com.denis.apocalypter.womenofwasteland", BepInDependency.DependencyFlags.SoftDependency)]
     public class SpawnerPlugin : BaseUnityPlugin
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.4";
+        public const string VERSION = "2.0.5";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -41,7 +42,7 @@ namespace Apocaspawner
             PreviewCache.Initialize();
             InputShield.Install();
 
-            SceneManager.sceneLoaded += (s, m) => { Catalog.Invalidate(); EnsureRunner("scene " + s.name); };
+            SceneManager.sceneLoaded += (s, m) => { Replacements.SceneChanged(); Catalog.Invalidate(); EnsureRunner("scene " + s.name); };
             NameTable.Init(Config);
             EnsureRunner("Awake");
             Log.LogInfo($"{NAME} {VERSION} loaded. {MenuKey} opens the spawner.");
@@ -75,6 +76,7 @@ namespace Apocaspawner
         public bool IsNpc;
         public PlayMakerFSM DevSpawnFsm; // Debug_Canvas button FSM, if this came from there
         public int Value;
+        internal NpcReplacement Replacement;
     }
 
     internal static class Catalog
@@ -311,6 +313,7 @@ namespace Apocaspawner
             }
 
             NpcCatalog.AddRegistered(byKey);
+            Replacements.AddEntries(byKey);
             foreach (var e in byKey.Values) e.Group = e.IsNpc ? NpcCatalog.Faction(e.Category) : GroupFor(e);
             NameTable.SaveIfDirty();
             _entries = byKey.Values

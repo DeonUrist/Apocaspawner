@@ -82,6 +82,18 @@ namespace Apocaspawner
             Catalog.Invalidate();
         }
         public static void UnregisterNpc(string prefabName) { RegisteredNpcs.Remove(prefabName); Catalog.Invalidate(); }
+        /// <summary>Register a named NPC conversion. The preview callback receives a script-free visual/skeleton copy; the spawn callback receives an inactive gameplay clone.</summary>
+        public static void RegisterNpcReplacement(string name, string basePrefabName, Func<GameObject, bool> convert, string displayName = null, string faction = null, Func<GameObject, bool> convertPreview = null, Action<GameObject> afterSpawn = null)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Replacement name required", nameof(name));
+            if (string.IsNullOrWhiteSpace(basePrefabName)) throw new ArgumentException("Base prefab name required", nameof(basePrefabName));
+            if (convert == null) throw new ArgumentNullException(nameof(convert));
+            name = Catalog.BaseName(name); basePrefabName = Catalog.BaseName(basePrefabName);
+            if (string.Equals(name, basePrefabName, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The replacement needs its own name", nameof(name));
+            Replacements.Register(new NpcReplacement { Name = name, BaseName = basePrefabName, Display = displayName ?? name,
+                Faction = faction, Convert = convert, ConvertPreview = convertPreview ?? convert, AfterSpawn = afterSpawn });
+        }
+        public static void UnregisterNpcReplacement(string name) { Replacements.Unregister(name); }
         public static void RegisterParameterProvider(string id, Func<GameObject, bool, IEnumerable<SpawnParameter>> provider)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Provider ID required", nameof(id));
