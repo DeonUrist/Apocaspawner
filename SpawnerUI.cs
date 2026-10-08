@@ -186,12 +186,22 @@ namespace Apocaspawner
             if (_selected == null) { SpawnerSkin.Label(new Rect(x, right.y + 20, width, 35), "Select an item or NPC", SpawnerSkin.Heading); SpawnerSkin.Label(new Rect(x, right.y + 58, width, 40), "Choose a name to view its model and parameters.", SpawnerSkin.Small, SpawnerSkin.Muted); return; }
             SpawnerSkin.Label(new Rect(x, right.y + 8, width, 27), _selected.Display, SpawnerSkin.Heading);
             SpawnerSkin.Label(new Rect(x, right.y + 34, width, 20), Catalog.DisplayGroup(_selected), SpawnerSkin.Small, SpawnerSkin.Muted);
+            if (!string.IsNullOrEmpty(_selected.Mod)) DrawModTag(new Rect(x, right.y + 34, width, 20), _selected.Mod);
             var preview = new Rect(x, right.y + 64, width * .43f, right.height - 76); SpawnerSkin.Panel(preview, SpawnerSkin.Background);
             if (_preview != null) GUI.DrawTexture(new Rect(preview.x + 8, preview.y + 8, preview.width - 16, preview.height - 16), _preview, ScaleMode.ScaleToFit, true);
             else SpawnerSkin.Label(preview, "Model preview unavailable", SpawnerSkin.Small, SpawnerSkin.Muted, TextAnchor.MiddleCenter);
             var table = new Rect(preview.xMax + 14, preview.y, width - preview.width - 14, preview.height);
             float height = ParameterHeight(table.width - 10);
             _parameterScroll = SpawnerSkin.Scroll(table, _parameterScroll, height, available => DrawParameters(available));
+        }
+        // Small "MOD · name version" badge at the right of the category line, for entries a mod adds
+        private static void DrawModTag(Rect line, string mod)
+        {
+            var content = new GUIContent("MOD · " + mod);
+            float w = Mathf.Min(line.width * .6f, SpawnerSkin.Small.CalcSize(content).x + 16);
+            var tag = new Rect(line.xMax - w, line.y, w, line.height);
+            SpawnerSkin.Panel(tag, SpawnerSkin.Selected, SpawnerSkin.Accent);
+            SpawnerSkin.Label(tag, content.text, SpawnerSkin.Small, SpawnerSkin.Accent, TextAnchor.MiddleCenter);
         }
         private float RowHeight(SpawnParameter row, float width)
         {

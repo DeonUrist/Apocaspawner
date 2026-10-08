@@ -24,7 +24,7 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.6";
+        public const string VERSION = "2.0.7";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -82,6 +82,44 @@ namespace Apocaspawner
         internal object GarageDef;  // ApocalypterGarage CarDef/ItemDef/EngineDef (null for everything else)
         internal int GarageKind;    // GarageBridge.KindCar/KindItem/KindEngine
         internal string GarageBase; // the vanilla prefab Garage builds it on
+        internal string Mod;        // "Mod Name 1.2.3" when a mod adds this entry (shown in the detail panel); null = the game's own
+    }
+
+    // Maps a mod's assembly to "Name version" from its BepInEx metadata (plugin objects may already be destroyed: compare by reference/location)
+    internal static class ModNames
+    {
+        internal static string For(System.Reflection.Assembly asm)
+        {
+            if (asm == null || asm == typeof(ModNames).Assembly) return null;
+            try
+            {
+                foreach (var info in BepInEx.Bootstrap.Chainloader.PluginInfos.Values)
+                {
+                    if (info == null) continue;
+                    bool same = (!ReferenceEquals(info.Instance, null) && info.Instance.GetType().Assembly == asm)
+                        || (!string.IsNullOrEmpty(info.Location) && !string.IsNullOrEmpty(asm.Location) && string.Equals(Path.GetFullPath(info.Location), Path.GetFullPath(asm.Location), StringComparison.OrdinalIgnoreCase));
+                    if (same) return Label(info);
+                }
+            }
+            catch { }
+            return asm.GetName().Name;
+        }
+        internal static string Label(BepInEx.PluginInfo info)
+        {
+            if (info == null || info.Metadata == null) return null;
+            return info.Metadata.Name + " " + info.Metadata.Version;
+        }
+        internal static System.Reflection.Assembly AssemblyOf(BepInEx.PluginInfo info)
+        {
+            if (info == null || string.IsNullOrEmpty(info.Location)) return null;
+            string want = Path.GetFullPath(info.Location);
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try { if (!asm.IsDynamic && !string.IsNullOrEmpty(asm.Location) && string.Equals(Path.GetFullPath(asm.Location), want, StringComparison.OrdinalIgnoreCase)) return asm; }
+                catch { }
+            }
+            return null;
+        }
     }
 
     internal static class Catalog

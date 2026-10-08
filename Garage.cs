@@ -36,6 +36,7 @@ namespace Apocaspawner
         private static PropertyInfo _enginesReady;
         private static object _kitWhole;
         private static string _version = "";
+        internal static string ModLabel => "ApocalypterGarage" + (string.IsNullOrEmpty(_version) ? "" : " " + _version);
 
         internal static void Init(ConfigFile config)
         {
@@ -54,9 +55,12 @@ namespace Apocaspawner
             try
             {
                 PluginInfo info;
-                if (!Chainloader.PluginInfos.TryGetValue(GarageGuid, out info) || info == null) return _ok = false;
-                Assembly asm = info.Instance != null ? info.Instance.GetType().Assembly : null;
-                if (asm == null) return _ok = false;
+                if (!Chainloader.PluginInfos.TryGetValue(GarageGuid, out info) || info == null) return _ok = false;   // not installed: stay quiet
+                // The game destroys BepInEx plugin objects on scene load, so Unity's == says the Instance is null while the managed object
+                // (and its type) is still there: compare by reference, and fall back to the loaded assembly list.
+                Assembly asm = !ReferenceEquals(info.Instance, null) ? info.Instance.GetType().Assembly : null;
+                if (asm == null) asm = ModNames.AssemblyOf(info);
+                if (asm == null) throw new MissingMemberException("its assembly is not loaded");
                 _version = info.Metadata != null ? info.Metadata.Version.ToString() : "";
                 const BindingFlags S = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
                 Type cars = Need(asm.GetType("ApocalypterGarage.Cars"), "Cars");
@@ -131,7 +135,7 @@ namespace Apocaspawner
                     byKey["garage-car:" + id] = new Entry
                     {
                         Key = "garage-car:" + id, Display = string.IsNullOrEmpty(name) ? id : name, Category = "garage-vehicle",
-                        Prefab = prefab, IsAsset = !prefab.scene.IsValid(), IsVehicle = true, GarageDef = def, GarageKind = KindCar, GarageBase = baseName
+                        Prefab = prefab, IsAsset = !prefab.scene.IsValid(), IsVehicle = true, GarageDef = def, GarageKind = KindCar, GarageBase = baseName, Mod = ModLabel
                     };
                     cars++;
                 }
@@ -151,7 +155,7 @@ namespace Apocaspawner
                     byKey["garage-engine:" + id] = new Entry
                     {
                         Key = "garage-engine:" + id, Display = string.IsNullOrEmpty(name) ? id : name, Category = "engine",
-                        Prefab = prefab, IsAsset = true, GarageDef = def, GarageKind = KindEngine, GarageBase = baseName
+                        Prefab = prefab, IsAsset = true, GarageDef = def, GarageKind = KindEngine, GarageBase = baseName, Mod = ModLabel
                     };
                     engines++;
                 }
@@ -168,7 +172,7 @@ namespace Apocaspawner
                     byKey["garage-part:" + id] = new Entry
                     {
                         Key = "garage-part:" + id, Display = ItemDisplay(id, Str(def, "Shown")), Category = baseEntry.Category,
-                        Prefab = baseEntry.Prefab, IsAsset = baseEntry.IsAsset, GarageDef = def, GarageKind = KindItem, GarageBase = baseName
+                        Prefab = baseEntry.Prefab, IsAsset = baseEntry.IsAsset, GarageDef = def, GarageKind = KindItem, GarageBase = baseName, Mod = ModLabel
                     };
                     items++;
                 }

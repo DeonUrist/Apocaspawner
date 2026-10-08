@@ -9,7 +9,7 @@ namespace Apocaspawner
 {
     internal sealed class NpcReplacement
     {
-        internal string Name, BaseName, Display, Faction;
+        internal string Name, BaseName, Display, Faction, Mod;
         internal Func<GameObject, bool> Convert, ConvertPreview;
         internal Action<GameObject> AfterSpawn;
     }
@@ -54,8 +54,8 @@ namespace Apocaspawner
             // Voice references may not be initialized during the inactive model conversion. Refresh them once the spawned FSMs are live.
             var voice = plugin.Instance.GetType().Assembly.GetType("WomenOfWasteland.Voice")?.GetMethod("Apply", BindingFlags.Static | BindingFlags.Public, null, new[] { typeof(GameObject) }, null);
             var finish = voice != null ? (Action<GameObject>)Delegate.CreateDelegate(typeof(Action<GameObject>), voice) : null;
-            if (!Registered.ContainsKey("Gungirl")) Registered["Gungirl"] = new NpcReplacement { Name = "Gungirl", BaseName = "Flexa", Display = "Gungirl", Convert = convert, ConvertPreview = convert, AfterSpawn = finish };
-            if (!Registered.ContainsKey("Shoota")) Registered["Shoota"] = new NpcReplacement { Name = "Shoota", BaseName = "Sprokka", Display = "Shoota", Convert = convert, ConvertPreview = convert, AfterSpawn = finish };
+            if (!Registered.ContainsKey("Gungirl")) Registered["Gungirl"] = new NpcReplacement { Name = "Gungirl", BaseName = "Flexa", Display = "Gungirl", Mod = ModNames.Label(plugin), Convert = convert, ConvertPreview = convert, AfterSpawn = finish };
+            if (!Registered.ContainsKey("Shoota")) Registered["Shoota"] = new NpcReplacement { Name = "Shoota", BaseName = "Sprokka", Display = "Shoota", Mod = ModNames.Label(plugin), Convert = convert, ConvertPreview = convert, AfterSpawn = finish };
             _womenRegistered = true;
             SpawnerPlugin.Log.LogInfo("Women of Wasteland integration: Gungirl and Shoota registered as explicit NPC replacements");
         }
@@ -69,7 +69,7 @@ namespace Apocaspawner
                 if (!byKey.TryGetValue(replacement.BaseName, out var source) || !source.IsNpc || source.Prefab == null) continue;
                 // Always instantiate the base prefab, rather than cloning a possibly injured live replacement.
                 byKey[replacement.Name] = new Entry { Key = replacement.Name, Display = NameTable.Resolve(replacement.Name, replacement.Display),
-                    Prefab = source.Prefab, Category = replacement.Faction ?? source.Category, IsNpc = true, IsAsset = source.IsAsset, Replacement = replacement };
+                    Prefab = source.Prefab, Category = replacement.Faction ?? source.Category, IsNpc = true, IsAsset = source.IsAsset, Replacement = replacement, Mod = replacement.Mod };
             }
         }
         internal static void Apply(Entry entry, GameObject instance)

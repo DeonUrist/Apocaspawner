@@ -53,7 +53,7 @@ namespace Apocaspawner
                 if (prefab == null) { Api.RegisteredNpcs.Remove(pair.Key); continue; }
                 if (IsBackup(pair.Key)) continue;
                 byKey[pair.Key] = new Entry { Key = pair.Key, Display = NameTable.Resolve(pair.Key, pair.Value.Name),
-                    Category = pair.Value.Faction, Prefab = prefab, IsAsset = !prefab.scene.IsValid(), IsNpc = true };
+                    Category = pair.Value.Faction, Prefab = prefab, IsAsset = !prefab.scene.IsValid(), IsNpc = true, Mod = pair.Value.Mod };
             }
         }
     }
@@ -70,7 +70,7 @@ namespace Apocaspawner
     public static class Api
     {
         public const int ContractVersion = 1;
-        internal sealed class Npc { internal GameObject Prefab; internal string Name, Faction; }
+        internal sealed class Npc { internal GameObject Prefab; internal string Name, Faction, Mod; }
         internal static readonly Dictionary<string, Npc> RegisteredNpcs = new Dictionary<string, Npc>(StringComparer.OrdinalIgnoreCase);
         internal static readonly Dictionary<string, Func<GameObject, bool, IEnumerable<SpawnParameter>>> Providers = new Dictionary<string, Func<GameObject, bool, IEnumerable<SpawnParameter>>>(StringComparer.OrdinalIgnoreCase);
 
@@ -78,7 +78,7 @@ namespace Apocaspawner
         public static void RegisterNpc(GameObject prefab, string displayName = null, string faction = null)
         {
             if (prefab == null) throw new ArgumentNullException(nameof(prefab));
-            RegisteredNpcs[Catalog.BaseName(prefab.name)] = new Npc { Prefab = prefab, Name = displayName ?? Catalog.BaseName(prefab.name), Faction = faction ?? prefab.tag };
+            RegisteredNpcs[Catalog.BaseName(prefab.name)] = new Npc { Prefab = prefab, Name = displayName ?? Catalog.BaseName(prefab.name), Faction = faction ?? prefab.tag, Mod = ModNames.For(System.Reflection.Assembly.GetCallingAssembly()) };
             Catalog.Invalidate();
         }
         public static void UnregisterNpc(string prefabName) { RegisteredNpcs.Remove(prefabName); Catalog.Invalidate(); }
@@ -91,7 +91,7 @@ namespace Apocaspawner
             name = Catalog.BaseName(name); basePrefabName = Catalog.BaseName(basePrefabName);
             if (string.Equals(name, basePrefabName, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("The replacement needs its own name", nameof(name));
             Replacements.Register(new NpcReplacement { Name = name, BaseName = basePrefabName, Display = displayName ?? name,
-                Faction = faction, Convert = convert, ConvertPreview = convertPreview ?? convert, AfterSpawn = afterSpawn });
+                Faction = faction, Mod = ModNames.For(System.Reflection.Assembly.GetCallingAssembly()), Convert = convert, ConvertPreview = convertPreview ?? convert, AfterSpawn = afterSpawn });
         }
         public static void UnregisterNpcReplacement(string name) { Replacements.Unregister(name); }
         public static void RegisterParameterProvider(string id, Func<GameObject, bool, IEnumerable<SpawnParameter>> provider)
