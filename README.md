@@ -23,6 +23,7 @@ Both keys are configurable. Spawning uses the game's naming counter and save-tra
 - With **Gunplay** installed, firearms and armed NPCs show its live **Effective range** in metres. Loose firearm items are linked to their firing models using the game's weaponType value. Melee weapons do not receive firearm ranges.
 - Weapon damage also covers melee models, normalized internal names such as folk17/folk_17, and referenced explosion prefabs. Distance-dependent explosion damage is labeled as its maximum.
 - Optional parameter providers can add any number of rows; the displayed values refresh while the selection is open.
+- **ApocalypterGarage support** (optional): when that mod is installed, its cars, engines and engine parts are read straight from its code and listed in the VEHICLES tab under **Garage Vehicles / Garage Engines / Garage Parts**. They are spawned through ApocalypterGarage's own functions (whole cars with wheels, seats, lamps and their own engine), so they look, work and save exactly like the ones it puts in the world. Turn them off with `[Spawn] ApocalypterGarage` (Apocasetter MODS menu, ON by default). The preview shows the vanilla car or item they are built on.
 - Original item groups and friendly-name ordering are retained (Grenade/Nuts pinned first; vehicle parts ordered by type/name).
 - Friendly item names in the `[Names]` section of the config (generated from the game's item names / prefab names on first
   sight, e.g. `Trailer_Big = Big Trailer`; edit them freely, an emptied value is regenerated).
@@ -36,7 +37,7 @@ Both keys are configurable. Spawning uses the game's naming counter and save-tra
 3. Copy `Apocaspawner.dll` to `BepInEx\plugins\`.
 
 Config: `BepInEx\config\com.denis.apocalypter.apocaspawner.cfg` — `[Keys] ToggleMenu` (default `F4`), `SpawnSelected` (default `Enter`), `[Spawn] Distance` (default `10`), `[General] Apocasetter`,
-`[Names]`.
+`[Spawn] ApocalypterGarage` (default `true`), `[Names]`.
 Old ItemDistance/VehicleDistance entries are superseded by the global Distance setting.
 
 ## Building
@@ -55,6 +56,11 @@ Item prefabs are discovered at runtime (`Resources.FindObjectsOfTypeAll<PlayMake
 `toolset_*` / `PartAdjusterTools` (static part meshes) and the `*explode` effect prefabs are blacklisted.
 
 NPC roots are discovered by their Health and Movement/Detection/Attack FSMs and classified using their actual faction tag. Explicit registrations support custom NPCs with different scripting systems. Actors seated inside other actors/vehicles are excluded as standalone scene templates; prefab assets are preferred over live instances.
+
+ApocalypterGarage has no prefabs of its own (it re-dresses vanilla prefabs and keeps a per-save sidecar), so its entries come from its
+`Cars.Defs` / `Engines.Defs` / `Items.Defs` lists via reflection and spawn via `Cars.Spawn(def, ground + Cars.Clearance(def), rot, CarKit.Whole)`,
+`Engines.Spawn` and `Items.Create`, followed by `Items.Finish` after 2.5 s — our own naming/registration is skipped for them (Garage registers them itself).
+If a future ApocalypterGarage version renames any of these, the integration switches itself off with one warning in the log.
 
 ## Integration API
 

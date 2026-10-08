@@ -19,11 +19,12 @@ namespace Apocaspawner
     [BepInPlugin(GUID, NAME, VERSION)]
     [BepInDependency(Apocasetter.Plugin.GUID, BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("com.denis.apocalypter.womenofwasteland", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(GarageBridge.GarageGuid, BepInDependency.DependencyFlags.SoftDependency)]
     public class SpawnerPlugin : BaseUnityPlugin
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.5";
+        public const string VERSION = "2.0.6";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -39,6 +40,7 @@ namespace Apocaspawner
             MenuKeyEntry = Config.Bind("Keys", "ToggleMenu", Key.F4, "Open/close the spawner window (Unity Input System key name, e.g. F4, Insert, Backquote)");
             SpawnKeyEntry = Config.Bind("Keys", "SpawnSelected", Key.Enter, "Spawn the selected item or NPC while the menu is open and no text field is being edited.");
             SpawnDistance = Config.Bind("Spawn", "Distance", 10f, new ConfigDescription("Global spawn distance in metres for items, vehicles and NPCs.", new AcceptableValueRange<float>(0.5f, 1000f)));
+            GarageBridge.Init(Config);
             PreviewCache.Initialize();
             InputShield.Install();
 
@@ -77,6 +79,9 @@ namespace Apocaspawner
         public PlayMakerFSM DevSpawnFsm; // Debug_Canvas button FSM, if this came from there
         public int Value;
         internal NpcReplacement Replacement;
+        internal object GarageDef;  // ApocalypterGarage CarDef/ItemDef/EngineDef (null for everything else)
+        internal int GarageKind;    // GarageBridge.KindCar/KindItem/KindEngine
+        internal string GarageBase; // the vanilla prefab Garage builds it on
     }
 
     internal static class Catalog
@@ -142,17 +147,18 @@ namespace Apocaspawner
         public static readonly string[] GroupOrder =
         {
             "Weapons", "Ammo", "Gear", "Drugs", "Food", "Cans & Barrels", "Camp & Farming",
-            "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
+            "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", GarageBridge.GroupCars, GarageBridge.GroupEngines, GarageBridge.GroupParts, "Cassettes", "Crates", "Trophies", "Carcasses", "Dev Spawns", "Other"
         };
 
         public static bool Blacklisted(string key) => NpcCatalog.IsBackup(key) || BlacklistPrefixes.Any(p => key.StartsWith(p, StringComparison.OrdinalIgnoreCase));
         public static bool BlacklistedCategory(string cat) => cat != null && BlacklistCategories.Any(c => string.Equals(c, cat, StringComparison.OrdinalIgnoreCase));
         internal static bool IsVehicleTool(Entry e) => !e.IsNpc && (string.Equals(e.Category, "Toolbox", StringComparison.OrdinalIgnoreCase) || string.Equals(e.Category, "Repairbox", StringComparison.OrdinalIgnoreCase));
-        internal static bool IsVehicleEntry(Entry e) => !e.IsNpc && (e.IsVehicle || e.Group == "Vehicles" || e.Group == "Trailers" || e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" || IsVehicleTool(e));
+        internal static bool IsVehicleEntry(Entry e) => !e.IsNpc && (e.IsVehicle || e.GarageKind != 0 || e.Group == "Vehicles" || e.Group == "Trailers" || e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" || IsVehicleTool(e));
         internal static string DisplayGroup(Entry e) => IsVehicleTool(e) ? "Tools" : e.Group;
 
         public static string GroupFor(Entry e)
         {
+            if (e.GarageKind != 0) return GarageBridge.GroupFor(e);
             if (e.Key != null && e.Key.StartsWith("trophy_", StringComparison.OrdinalIgnoreCase)) return "Trophies";
             if (e.Key != null && GroupByKey.TryGetValue(e.Key, out var g)) return g;
             if (e.Key != null) foreach (var kv in GroupByPrefix) if (e.Key.StartsWith(kv.Key, StringComparison.OrdinalIgnoreCase)) return kv.Value;
@@ -266,6 +272,7 @@ namespace Apocaspawner
                 bool isNpc = NpcCatalog.IsNpc(go, names);
                 bool isItem = names.Contains("ID");
                 if (!isVehicle && !isItem && !isNpc) continue;
+                if (!isAsset && GarageBridge.IsGarageObject(go)) continue;   // live ApocalypterGarage objects: offered through GarageBridge instead
                 if (go.transform.parent != null && !isVehicle && !isNpc && !isAsset) continue; // scene items nested in something: skip (parts, UI)
                 if (isNpc && NpcCatalog.NestedActor(go)) continue;
                 if (isVehicle && go.transform.parent != null) continue;              // vehicle parts carry vehicle-ish FSMs too
@@ -314,12 +321,13 @@ namespace Apocaspawner
 
             NpcCatalog.AddRegistered(byKey);
             Replacements.AddEntries(byKey);
+            GarageBridge.AddEntries(byKey);
             foreach (var e in byKey.Values) e.Group = e.IsNpc ? NpcCatalog.Faction(e.Category) : GroupFor(e);
             NameTable.SaveIfDirty();
             _entries = byKey.Values
                 .OrderBy(e => { var i = Array.IndexOf(GroupOrder, e.Group); return i < 0 ? 999 : i; })
                 .ThenBy(PriorityFor)
-                .ThenBy(e => e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" ? e.Category : "", StringComparer.OrdinalIgnoreCase)   // parts: by type first
+                .ThenBy(e => e.Group == "Vehicle Parts" || e.Group == "Vehicle Body" || e.Group == GarageBridge.GroupParts ? e.Category : "", StringComparer.OrdinalIgnoreCase)   // parts: by type first
                 .ThenBy(e => e.Display, StringComparer.OrdinalIgnoreCase).ToList();
             SpawnerPlugin.Log.LogInfo($"Catalog: {_entries.Count} entries, categories: {string.Join(", ", _entries.GroupBy(e => e.Category).Select(g => $"{g.Key}({g.Count()})"))}");
             return _entries;
@@ -356,11 +364,20 @@ namespace Apocaspawner
             float spacing = e.IsVehicle || e.IsNpc ? Mathf.Max(1.5f, Mathf.Max(size.x, size.z) + .5f) : .4f;
             var side = Vector3.Cross(Vector3.up, fwd);
             var positions = new Vector3[count];
+            if (e.GarageKind == GarageBridge.KindCar) spacing += 1f;   // Garage bodies can be longer/wider than their base car
+            if (e.GarageKind == GarageBridge.KindEngine) spacing = 1.2f;
             for (int i = 0; i < count; i++)
             {
                 float dist = SpawnerPlugin.SpawnDistance.Value;
                 var pos = t.position + fwd * dist + side * ((i - (count - 1) * .5f) * spacing);
-                positions[i] = Placement.Resolve(e, pos);
+                positions[i] = e.GarageKind != 0 ? GarageBridge.Place(e, pos) : Placement.Resolve(e, pos);
+            }
+            if (e.GarageKind != 0)
+            {
+                // Garage names, registers and dresses its own objects; our Register must not run (double list entry = duplicate on load)
+                for (int i = 0; i < count; i++)
+                    GarageBridge.Spawn(e, positions[i], e.GarageKind == GarageBridge.KindCar ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation);
+                return;
             }
             for (int i = 0; i < count; i++)
             {

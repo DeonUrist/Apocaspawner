@@ -7,4 +7,4 @@ mcs -nostdlib -noconfig -target:library -langversion:latest -optimize+ -out:${1:
   -r:$M/UnityEngine.dll -r:$M/UnityEngine.CoreModule.dll -r:$M/UnityEngine.InputLegacyModule.dll -r:$M/UnityEngine.IMGUIModule.dll \
   -r:$M/UnityEngine.PhysicsModule.dll -r:$M/UnityEngine.TextRenderingModule.dll -r:$M/UnityEngine.ImageConversionModule.dll -r:$M/Unity.InputSystem.dll \
   -r:$M/PlayMaker.dll -r:$M/Assembly-CSharp.dll -r:$A \
-  Spawner.cs Names.cs Npcs.cs Parameters.cs PreviewCache.cs SpawnerSkin.cs SpawnerUI.cs InputShield.cs Placement.cs Replacements.cs
+  Spawner.cs Names.cs Npcs.cs Parameters.cs PreviewCache.cs SpawnerSkin.cs SpawnerUI.cs InputShield.cs Placement.cs Replacements.cs Garage.cs

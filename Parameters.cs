@@ -20,6 +20,7 @@ namespace Apocaspawner
         {
             var result = new List<SpawnParameter>(); var go = entry?.Prefab;
             if (go == null) return result;
+            if (entry.GarageKind != 0) return GarageBridge.Parameters(entry);   // the base prefab's own numbers would be wrong for these
             result.Add(new SpawnParameter(entry.IsNpc ? "Faction" : "Category", Catalog.DisplayGroup(entry), section: "Overview"));
             var fsms = go.GetComponents<PlayMakerFSM>().Where(f => f != null).ToArray();
             var health = Float(fsms, "Health", "Health");

@@ -146,7 +146,7 @@ namespace Apocaspawner
             var left = new Rect(26, top, 168, height); var middle = new Rect(210, top, 272, height); var right = new Rect(498, top, Width - 524, height);
             foreach (var r in new[] { left, middle, right }) SpawnerSkin.Panel(r, new Color(23 / 255f, 19 / 255f, 13 / 255f, .91f));
             var entries = _catalog.Where(e => EntryTab(e) == Tab).ToList();
-            var order = _vehicles ? new[] { "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", "Tools" } : Catalog.GroupOrder;
+            var order = _vehicles ? new[] { "Vehicles", "Trailers", "Vehicle Parts", "Vehicle Body", "Tools", GarageBridge.GroupCars, GarageBridge.GroupEngines, GarageBridge.GroupParts } : Catalog.GroupOrder;
             var categories = _npc ? NpcCatalog.Factions : order.Where(g => entries.Any(e => Catalog.DisplayGroup(e) == g)).ToArray();
             SpawnerSkin.Label(new Rect(left.x + 12, top + 6, left.width - 24, 26), _npc ? "Faction" : "Category", SpawnerSkin.Heading);
             _catScroll = SpawnerSkin.Scroll(new Rect(left.x + 8, top + 38, left.width - 16, height - 48), _catScroll, (categories.Length + 1) * 34, width =>
