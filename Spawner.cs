@@ -24,7 +24,7 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.7";
+        public const string VERSION = "2.0.8";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;

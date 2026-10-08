@@ -36,6 +36,7 @@ namespace Apocaspawner
         private static PropertyInfo _enginesReady;
         private static object _kitWhole;
         private static string _version = "";
+        internal static Assembly Asm;   // ApocalypterGarage's assembly once resolved (GaragePreview reads more of it)
         internal static string ModLabel => "ApocalypterGarage" + (string.IsNullOrEmpty(_version) ? "" : " " + _version);
 
         internal static void Init(ConfigFile config)
@@ -61,6 +62,7 @@ namespace Apocaspawner
                 Assembly asm = !ReferenceEquals(info.Instance, null) ? info.Instance.GetType().Assembly : null;
                 if (asm == null) asm = ModNames.AssemblyOf(info);
                 if (asm == null) throw new MissingMemberException("its assembly is not loaded");
+                Asm = asm;
                 _version = info.Metadata != null ? info.Metadata.Version.ToString() : "";
                 const BindingFlags S = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
                 Type cars = Need(asm.GetType("ApocalypterGarage.Cars"), "Cars");

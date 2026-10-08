@@ -41,7 +41,7 @@ namespace Apocaspawner
         private static void Release(string name)
         { if (Previews.TryGetValue(name, out var preview)) { preview.Dispose(); Previews.Remove(name); } }
         internal static void SceneChanged()
-        { foreach (var preview in Previews.Values) preview.Dispose(); Previews.Clear(); }
+        { GaragePreview.Clear(); foreach (var preview in Previews.Values) preview.Dispose(); Previews.Clear(); }
 
         private static void RegisterWomenOfWasteland()
         {
@@ -84,6 +84,7 @@ namespace Apocaspawner
         }
         internal static GameObject PreviewModel(Entry entry)
         {
+            if (entry.GarageKind != 0) return GaragePreview.Model(entry) ?? entry.Prefab;
             if (entry.Replacement == null) return entry.Prefab;
             if (Previews.TryGetValue(entry.Key, out var previous))
             {
@@ -105,7 +106,7 @@ namespace Apocaspawner
                 return null;
             }
         }
-        private static GameObject VisualCopy(GameObject source, List<Material> owned)
+        internal static GameObject VisualCopy(GameObject source, List<Material> owned)
         {
             // Copy only transforms, skeletons and mesh renderers. No prefab instantiation, scripts, AI, colliders or save components.
             var root = new GameObject(Catalog.BaseName(source.name)) { hideFlags = HideFlags.HideAndDontSave, layer = source.layer };
