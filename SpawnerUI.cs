@@ -98,11 +98,12 @@ namespace Apocaspawner
             if (_selected == null || !Catalog.InGame || _binding) return;
             if (!float.TryParse(_distanceText, NumberStyles.Float, CultureInfo.InvariantCulture, out var distance) || float.IsNaN(distance) || float.IsInfinity(distance))
             { _status = "Enter a valid spawn distance."; return; }
-            if (!int.TryParse(_countText, out var count)) { _status = "Enter a whole-number quantity."; return; }
+            int count = 1;
+            if (!_selected.IsPortableRadio && !int.TryParse(_countText, out count)) { _status = "Enter a whole-number quantity."; return; }
             distance = Mathf.Clamp(distance, .5f, 1000f); _count = Mathf.Clamp(count, 1, 50);
             _distanceText = distance.ToString("0.##", CultureInfo.InvariantCulture); _countText = _count.ToString();
             SpawnerPlugin.SpawnDistance.Value = distance;
-            try { Spawner.Spawn(_selected, _count); _status = "Spawned " + _count + " × " + _selected.Display + " at " + _distanceText + " m."; }
+            try { Spawner.Spawn(_selected, _count); _status = _selected.IsPortableRadio ? "Retrieved your Portable Radio at " + _distanceText + " m." : "Spawned " + _count + " × " + _selected.Display + " at " + _distanceText + " m."; }
             catch (Exception e) { _status = "Spawn failed: " + e.Message; SpawnerPlugin.Log.LogError(e); }
         }
         private void OnGUI()
@@ -245,10 +246,15 @@ namespace Apocaspawner
             }
             SpawnerSkin.Label(new Rect(distanceX + 133, y + 32, 20, 30), "m", SpawnerSkin.Small, SpawnerSkin.Muted);
             SpawnerSkin.Label(new Rect(countX, y + 8, 143, 18), "Quantity", SpawnerSkin.Small, SpawnerSkin.Muted);
-            if (SpawnerSkin.Button(new Rect(countX, y + 32, 33, 30), "−")) { GUI.FocusControl(null); ChangeCount(-1); }
-            GUI.SetNextControlName("Spawner.Count"); _countText = GUI.TextField(new Rect(countX + 38, y + 32, 54, 30), _countText, SpawnerSkin.Input);
-            if (SpawnerSkin.Button(new Rect(countX + 97, y + 32, 33, 30), "+")) { GUI.FocusControl(null); ChangeCount(1); }
-            if (SpawnerSkin.Button(new Rect(spawnX, y + 32, 154, 30), "SPAWN", enabled: _selected != null && Catalog.InGame && !_binding, primary: true, gameFont: true)) { GUI.FocusControl(null); _pending = SpawnSelected; }
+            if (_selected != null && _selected.IsPortableRadio)
+                SpawnerSkin.Label(new Rect(countX, y + 32, 143, 30), "1 · existing radio", SpawnerSkin.Small, SpawnerSkin.Muted);
+            else
+            {
+                if (SpawnerSkin.Button(new Rect(countX, y + 32, 33, 30), "−")) { GUI.FocusControl(null); ChangeCount(-1); }
+                GUI.SetNextControlName("Spawner.Count"); _countText = GUI.TextField(new Rect(countX + 38, y + 32, 54, 30), _countText, SpawnerSkin.Input);
+                if (SpawnerSkin.Button(new Rect(countX + 97, y + 32, 33, 30), "+")) { GUI.FocusControl(null); ChangeCount(1); }
+            }
+            if (SpawnerSkin.Button(new Rect(spawnX, y + 32, 154, 30), _selected != null && _selected.IsPortableRadio ? "RETRIEVE" : "SPAWN", enabled: _selected != null && Catalog.InGame && !_binding, primary: true, gameFont: true)) { GUI.FocusControl(null); _pending = SpawnSelected; }
             var keyRect = new Rect(spawnX, y + 6, 154, 20);
             if (GUI.Button(keyRect, GUIContent.none, GUIStyle.none)) { GUI.FocusControl(null); _binding = !_binding; }
             SpawnerSkin.Label(keyRect, _binding ? "Press a key…" : "[" + SpawnerPlugin.SpawnKeyEntry.Value + "] · Change key", SpawnerSkin.Small, SpawnerSkin.Muted, TextAnchor.MiddleCenter);

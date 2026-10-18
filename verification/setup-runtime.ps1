@@ -1,3 +1,8 @@
+param(
+    [switch]$Templates,
+    [string]$WeaponsPackDir,
+    [string]$CassetteCatalogDir = 'E:\SteamLibrary\steamapps\common\Apocalypter\BepInEx\plugins\CassetteCatalog'
+)
 $ErrorActionPreference = 'Stop'
 $gameDir = 'E:\SteamLibrary\steamapps\common\Apocalypter'
 $verifyDir = Split-Path -Parent $PSCommandPath
@@ -16,10 +21,20 @@ Copy-Item -LiteralPath (Join-Path $gameDir 'BepInEx\core') -Destination $bepDir 
 $pluginsDir = Join-Path $bepDir 'plugins'
 New-Item -ItemType Directory -Path $pluginsDir -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $gameDir 'BepInEx\plugins\Apocasetter') -Destination $pluginsDir -Recurse -Force
-Copy-Item -LiteralPath (Join-Path $gameDir 'BepInEx\plugins\Gunplay') -Destination $pluginsDir -Recurse -Force
+$gunplayDir = Join-Path $gameDir 'BepInEx\plugins\Gunplay'
+if (Test-Path -LiteralPath $gunplayDir) { Copy-Item -LiteralPath $gunplayDir -Destination $pluginsDir -Recurse -Force }
+if ($Templates) {
+    if (-not $WeaponsPackDir) { $WeaponsPackDir = Join-Path $gameDir 'BepInEx\plugins\Apocalypter Weapons Pack' }
+    foreach ($modDir in @($WeaponsPackDir, $CassetteCatalogDir)) {
+        if (-not (Test-Path -LiteralPath $modDir -PathType Container)) { throw "Missing verification mod folder: $modDir" }
+        Copy-Item -LiteralPath $modDir -Destination $pluginsDir -Recurse -Force
+    }
+}
 Copy-Item -LiteralPath (Join-Path $verifyDir '..\bin\Release\Apocaspawner.dll') -Destination $pluginsDir -Force
 Copy-Item -LiteralPath (Join-Path $verifyDir 'bin\Release\ApocaspawnerNativeVerifier.dll') -Destination $pluginsDir -Force
 $outputDir = Join-Path $verifyDir 'output'
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-$process = Start-Process -FilePath (Join-Path $runtimeDir 'Apocalypter.exe') -WorkingDirectory $runtimeDir -WindowStyle Hidden -ArgumentList @('-screen-fullscreen','0','-screen-width','1440','-screen-height','960',"-spawner-output=$outputDir",'-logFile',(Join-Path $outputDir 'unity.log')) -PassThru
+$launchArguments = @('-screen-fullscreen','0','-screen-width','1440','-screen-height','960',"-spawner-output=$outputDir",'-logFile',(Join-Path $outputDir 'unity.log'))
+if ($Templates) { $launchArguments += '-spawner-templates' }
+$process = Start-Process -FilePath (Join-Path $runtimeDir 'Apocalypter.exe') -WorkingDirectory $runtimeDir -WindowStyle Hidden -ArgumentList $launchArguments -PassThru
 Write-Output "Verifier PID=$($process.Id)"

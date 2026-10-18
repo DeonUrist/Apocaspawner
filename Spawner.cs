@@ -20,11 +20,12 @@ namespace Apocaspawner
     [BepInDependency(Apocasetter.Plugin.GUID, BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("com.denis.apocalypter.womenofwasteland", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency(GarageBridge.GarageGuid, BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency(PortableRadioBridge.Guid, BepInDependency.DependencyFlags.SoftDependency)]
     public class SpawnerPlugin : BaseUnityPlugin
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.8";
+        public const string VERSION = "2.0.10";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
@@ -74,6 +75,8 @@ namespace Apocaspawner
         public string Group;        // our logical grouping for the UI
         public GameObject Prefab;   // asset (not in scene) when available
         public bool IsAsset;
+        internal bool IsRegisteredTemplate;
+        internal bool IsPortableRadio => Key == PortableRadioBridge.Key;
         public bool IsVehicle;
         public bool IsNpc;
         public PlayMakerFSM DevSpawnFsm; // Debug_Canvas button FSM, if this came from there
@@ -196,6 +199,7 @@ namespace Apocaspawner
 
         public static string GroupFor(Entry e)
         {
+            if (e.IsPortableRadio) return "Gear";
             if (e.GarageKind != 0) return GarageBridge.GroupFor(e);
             if (e.Key != null && e.Key.StartsWith("trophy_", StringComparison.OrdinalIgnoreCase)) return "Trophies";
             if (e.Key != null && GroupByKey.TryGetValue(e.Key, out var g)) return g;
@@ -286,7 +290,8 @@ namespace Apocaspawner
         {
             if (_entries != null) return _entries;
             var byKey = new Dictionary<string, Entry>();
-            var all = Resources.FindObjectsOfTypeAll<PlayMakerFSM>().Where(f => f != null).ToArray();
+            var all = Resources.FindObjectsOfTypeAll<PlayMakerFSM>().Where(f => f != null && f.Fsm != null).ToArray();
+            var templates = new RegisteredTemplates();
 
             // group FSMs by their GameObject
             var byGo = new Dictionary<GameObject, List<PlayMakerFSM>>();
@@ -300,6 +305,7 @@ namespace Apocaspawner
             {
                 var go = kv.Key; var fsms = kv.Value;
                 bool isAsset = !go.scene.IsValid();
+                bool isTemplate = templates.Contains(go);
                 var names = new HashSet<string>(fsms.Select(f => f.FsmName));
 
                 // trailers (Trailer_Big/Trailer_Small) carry none of the car FSMs, only TrailerAttached/TireWear/DistanceKinematic;
@@ -310,15 +316,16 @@ namespace Apocaspawner
                 bool isNpc = NpcCatalog.IsNpc(go, names);
                 bool isItem = names.Contains("ID");
                 if (!isVehicle && !isItem && !isNpc) continue;
+                if (templates.IsInstance(go)) continue;
                 if (!isAsset && GarageBridge.IsGarageObject(go)) continue;   // live ApocalypterGarage objects: offered through GarageBridge instead
-                if (go.transform.parent != null && !isVehicle && !isNpc && !isAsset) continue; // scene items nested in something: skip (parts, UI)
-                if (isNpc && NpcCatalog.NestedActor(go)) continue;
-                if (isVehicle && go.transform.parent != null) continue;              // vehicle parts carry vehicle-ish FSMs too
+                if (go.transform.parent != null && !isVehicle && !isNpc && !isAsset && !isTemplate) continue;
+                if (isNpc && !isTemplate && NpcCatalog.NestedActor(go)) continue;
+                if (isVehicle && go.transform.parent != null && !isTemplate) continue;
 
                 var key = BaseName(go.name);
                 if (string.IsNullOrEmpty(key) || Blacklisted(key)) continue;
 
-                var e = new Entry { Key = key, Prefab = go, IsAsset = isAsset, IsVehicle = isVehicle, IsNpc = isNpc };
+                var e = new Entry { Key = key, Prefab = go, IsAsset = isAsset, IsRegisteredTemplate = isTemplate, IsVehicle = isVehicle, IsNpc = isNpc };
                 var itemName = fsms.FirstOrDefault(f => f.FsmName == "ItemName")?.FsmVariables.GetFsmString("ItemName")?.Value;
                 e.Category = isNpc ? go.tag : isTrailer ? "trailer" : isVehicle ? "vehicle" : (fsms.FirstOrDefault(f => f.FsmName == "ID")?.FsmVariables.GetFsmString("ID")?.Value ?? "misc");
                 if (string.IsNullOrEmpty(e.Category)) e.Category = "misc";
@@ -326,8 +333,9 @@ namespace Apocaspawner
                 e.Display = NameTable.Resolve(e.Key, LabelFor(e, itemName));
                 e.Value = fsms.FirstOrDefault(f => f.FsmName == "Value")?.FsmVariables.GetFsmInt("BuyValue")?.Value ?? 0;
 
-                // prefer assets over scene instances for the same key
-                if (byKey.TryGetValue(key, out var existing) && (existing.IsAsset || !isAsset)) continue;
+                // Prefer assets, then registered runtime templates, then loose scene instances.
+                int priority = isAsset ? 2 : isTemplate ? 1 : 0;
+                if (byKey.TryGetValue(key, out var existing) && (existing.IsAsset ? 2 : existing.IsRegisteredTemplate ? 1 : 0) >= priority) continue;
                 byKey[key] = e;
             }
 
@@ -360,6 +368,7 @@ namespace Apocaspawner
             NpcCatalog.AddRegistered(byKey);
             Replacements.AddEntries(byKey);
             GarageBridge.AddEntries(byKey);
+            PortableRadioBridge.AddEntries(byKey);
             foreach (var e in byKey.Values) e.Group = e.IsNpc ? NpcCatalog.Faction(e.Category) : GroupFor(e);
             NameTable.SaveIfDirty();
             _entries = byKey.Values
@@ -382,6 +391,15 @@ namespace Apocaspawner
 
         public static void Spawn(Entry e, int count = 1)
         {
+            if (e.IsPortableRadio)
+            {
+                var owner = Catalog.Player;
+                if (owner == null) throw new InvalidOperationException("Player not found.");
+                var direction = Vector3.ProjectOnPlane(owner.transform.forward, Vector3.up).normalized;
+                if (direction.sqrMagnitude < .01f) direction = Vector3.forward;
+                PortableRadioBridge.Retrieve(owner.transform.position + direction * SpawnerPlugin.SpawnDistance.Value, Quaternion.LookRotation(direction), count);
+                return;
+            }
             // The developer buttons use their own hard-coded positions. A usable prefab always takes the global-distance path.
             if (e.Prefab == null && e.DevSpawnFsm != null && UseDevSpawner && e.DevSpawnFsm.isActiveAndEnabled)
             {

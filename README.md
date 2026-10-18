@@ -8,6 +8,8 @@ Both keys are configurable. Spawning uses the game's naming counter and save-tra
 ## Features
 
 - **ITEMS / VEHICLES / NPC tabs**, with category/faction on the left, names in the middle, and a wider model/parameter panel on the right.
+- **Portable Radio support** (optional): **ITEMS / Gear / Portable Radio (retrieve)** brings your existing radio to the selected distance with **RETRIEVE** or the spawn hotkey. It retains its tuning, volume, power, controls and original save handling. The radio mod supports one radio per save; retrieval never creates duplicates. Mounted radios detach through the radio mod's own physics. Drop a held radio first. If the entry has not appeared yet, reopen F4 after the radio finishes initializing.
+- Runtime item templates published in the game's save-prefab registry or `NewGO_ArrayList/ItemList` are discovered automatically, including parented inactive templates. This includes Weapons Pack's chainsaw/flamethrower under **Weapons** and CassetteCatalog tapes under **Cassettes**. Reopen F4 after another mod finishes registering new items to refresh the list.
 - Search text is retained when switching tabs. Editable field text is centered horizontally and vertically.
 - VEHICLES contains chassis, trailers, vehicle parts, body elements, toolboxes and repair boxes. ITEMS contains the remaining inventory items.
 - NPC factions: **Animals, Mutants, Coyotes, Scrapyard, Other**. Unknown/mod-added factions go in Other. BACKUP variants are hidden; corpses remain in ITEMS.
@@ -56,12 +58,16 @@ Item prefabs are discovered at runtime (`Resources.FindObjectsOfTypeAll<PlayMake
 `itemNameID` counter, name it `<prefab>(Clone)<n>`, and add it to the `NewGO_ArrayList` (`ArrayList_Items` / `ArrayList_Cars`).
 `toolset_*` / `PartAdjusterTools` (static part meshes) and the `*explode` effect prefabs are blacklisted.
 
+Discovery also reads exact template references from loaded `ES3ReferenceMgrBase.prefabs` lists and the runtime/prefilled `ItemList`. These references allow parented templates without admitting unrelated attached parts or inventory objects. Save-tracked items/cars are excluded from template promotion; scene copies sharing a registered prefab's save ID are excluded from discovery. Asset prefabs are preferred, followed by registered runtime templates, then the existing loose-scene fallback. Uninitialized PlayMaker components are skipped. Source objects are cloned for spawning and retain their parent/activity. No third-party GUID, template-holder name or mod assembly is required for this path.
+
 NPC roots are discovered by their Health and Movement/Detection/Attack FSMs and classified using their actual faction tag. Explicit registrations support custom NPCs with different scripting systems. Actors seated inside other actors/vehicles are excluded as standalone scene templates; prefab assets are preferred over live instances.
 
 ApocalypterGarage has no prefabs of its own (it re-dresses vanilla prefabs and keeps a per-save sidecar), so its entries come from its
 `Cars.Defs` / `Engines.Defs` / `Items.Defs` lists via reflection and spawn via `Cars.Spawn(def, ground + Cars.Clearance(def), rot, CarKit.Whole)`,
 `Engines.Spawn` and `Items.Create`, followed by `Items.Finish` after 2.5 s — our own naming/registration is skipped for them (Garage registers them itself).
 If a future ApocalypterGarage version renames any of these, the integration switches itself off with one warning in the log.
+
+Portable Radio 1.1.0 creates a custom `RadioObject` without a native item ID FSM. Its `RadioManager` owns one radio and saves it through its own per-slot JSON file. The optional reflection bridge uses that manager's current radio and `RadioPhysics.RestoreWorld`, clears pending automatic placement, and leaves the controller and persistence intact. It never clones the radio, adds it to the native save lists or ships the radio mod's DLL/music. Newer radio versions are accepted when the required member signatures remain compatible. Missing members produce one warning and leave the rest of the spawner available.
 
 ## Integration API
 
@@ -88,3 +94,5 @@ Persistent previews live in `BepInEx/cache/Apocalypter/ModelPreviews/v1`. Keys i
 ## Verification
 
 `verification/NativeVerifier.csproj` and `verification/setup-runtime.ps1` exercise the real Unity runtime in a separate checkout with gameplay FSMs suppressed. They verify real faction discovery, tab membership, BACKUP exclusion, model pixels, no preview gameplay components, resident/disk reuse, optional Gunplay ranges, custom providers, keyboard/mouse blocking, and NPC spawn distance/registration. Real NPC rigidbodies are simulated on a thin ground collider to verify placement and collision support. Captures cover all tabs and the inset footer. This does not verify NPC combat or a save/load gameplay round trip.
+
+Build `verification/NativeVerifier.csproj -c Release`, then use `verification/setup-runtime.ps1 -Templates -WeaponsPackDir '<release plugin folder>'` to run `TemplateProbe` instead. CassetteCatalog is copied from its installed game folder (override with `-CassetteCatalogDir`). With unmodified Weapons Pack 1.6.2 and CassetteCatalog 0.1.5 in the separate verification runtime, it checks provider survival through startup/scene loading, discovery/grouping, all three tape labels, spawning/save-list registration, unchanged inactive sources, UUID-named clone exclusion, ES3-only/ItemList-only/prefill-only providers, unregistered attachments, owned-object exclusion and null-FSM safety. The test harness keeps the plugin host hidden/persistent because it bypasses normal startup and omits the user's other mods; production Apocaspawner does not change that host. It does not load or save a player slot or test weapon combat/tape playback.

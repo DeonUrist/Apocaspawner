@@ -19,6 +19,13 @@ namespace Apocaspawner
         internal static List<SpawnParameter> Read(Entry entry)
         {
             var result = new List<SpawnParameter>(); var go = entry?.Prefab;
+            if (entry != null && entry.IsPortableRadio)
+            {
+                result.Add(new SpawnParameter("Action", "Retrieve existing radio", section: "Overview"));
+                result.Add(new SpawnParameter("Quantity", "One per save", section: "Overview"));
+                result.Add(new SpawnParameter("Saving", "Original radio mod", section: "Overview"));
+                return result;
+            }
             if (go == null) return result;
             if (entry.GarageKind != 0) return GarageBridge.Parameters(entry);   // the base prefab's own numbers would be wrong for these
             result.Add(new SpawnParameter(entry.IsNpc ? "Faction" : "Category", Catalog.DisplayGroup(entry), section: "Overview"));

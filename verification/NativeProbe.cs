@@ -15,14 +15,24 @@ using UnityEngine.InputSystem.LowLevel;
 
 [BepInPlugin("com.denis.apocaspawner.native-verifier", "Spawner Native Verifier", "0.1.0")]
 [BepInDependency(SpawnerPlugin.GUID)]
+[BepInDependency("local.cassettecatalog", BepInDependency.DependencyFlags.SoftDependency)]
 public sealed class NativeProbe : BaseUnityPlugin
 {
     private void Awake()
     {
         string argument = Environment.GetCommandLineArgs().FirstOrDefault(a => a.StartsWith("-spawner-output="));
         if (argument == null) return;
+        // Preserve the plugin host in this stripped-down fixture, which bypasses the normal
+        // game startup flow and omits the user's other mods. Providers must survive scene loading.
+        gameObject.hideFlags |= HideFlags.HideAndDontSave;
+        DontDestroyOnLoad(gameObject);
         new Harmony("spawner.native-verifier").Patch(typeof(PlayMakerFSM).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic), prefix: new HarmonyMethod(typeof(NativeProbe), nameof(PreventGameplay)));
         var host = new GameObject("Spawner verifier") { hideFlags = HideFlags.HideAndDontSave }; DontDestroyOnLoad(host);
+        if (Environment.GetCommandLineArgs().Contains("-spawner-templates"))
+        {
+            host.AddComponent<TemplateProbe>().Output = argument.Substring(argument.IndexOf('=') + 1);
+            return;
+        }
         host.AddComponent<NativeRunner>().Output = argument.Substring(argument.IndexOf('=') + 1);
     }
     private static bool PreventGameplay() { return false; }
