@@ -25,13 +25,14 @@ namespace Apocaspawner
     {
         public const string GUID = "com.denis.apocalypter.apocaspawner";
         public const string NAME = "Apocaspawner";
-        public const string VERSION = "2.0.10";
+        public const string VERSION = "2.0.11";
 
         internal static ManualLogSource Log;
         internal static ConfigEntry<Key> MenuKeyEntry;
         internal static Key MenuKey => MenuKeyEntry.Value;
         internal static ConfigEntry<Key> SpawnKeyEntry;
         internal static ConfigEntry<float> SpawnDistance;
+        internal static ConfigEntry<bool> SpawnEmpty;
         private static GameObject _runner;
 
         private void Awake()
@@ -41,6 +42,7 @@ namespace Apocaspawner
             MenuKeyEntry = Config.Bind("Keys", "ToggleMenu", Key.F4, "Open/close the spawner window (Unity Input System key name, e.g. F4, Insert, Backquote)");
             SpawnKeyEntry = Config.Bind("Keys", "SpawnSelected", Key.Enter, "Spawn the selected item or NPC while the menu is open and no text field is being edited.");
             SpawnDistance = Config.Bind("Spawn", "Distance", 10f, new ConfigDescription("Global spawn distance in metres for items, vehicles and NPCs.", new AcceptableValueRange<float>(0.5f, 1000f)));
+            SpawnEmpty = Config.Bind("Spawn", "Empty", false, "Spawn containers (fuel/water/oil cans and barrels, engines, radiators, ammo boxes, ...) empty instead of full. Also switchable in the spawner window.");
             GarageBridge.Init(Config);
             PreviewCache.Initialize();
             InputShield.Install();
@@ -389,8 +391,9 @@ namespace Apocaspawner
     {
         public static bool UseDevSpawner = true;
 
-        public static void Spawn(Entry e, int count = 1)
+        public static void Spawn(Entry e, int count = 1, bool empty = false)
         {
+            empty = empty && Contents.Applies(e);
             if (e.IsPortableRadio)
             {
                 var owner = Catalog.Player;
@@ -432,13 +435,17 @@ namespace Apocaspawner
             {
                 // Garage names, registers and dresses its own objects; our Register must not run (double list entry = duplicate on load)
                 for (int i = 0; i < count; i++)
-                    GarageBridge.Spawn(e, positions[i], e.GarageKind == GarageBridge.KindCar ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation);
+                {
+                    var go = GarageBridge.Spawn(e, positions[i], e.GarageKind == GarageBridge.KindCar ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation);
+                    if (empty) Contents.Empty(go, e);
+                }
                 return;
             }
             for (int i = 0; i < count; i++)
             {
                 var rot = e.IsVehicle || e.IsNpc ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation;
-                Placement.Create(e, positions[i], rot, go => Register(go, e));
+                // emptied while still inactive in staging, so no start state ever sees the full amount
+                Placement.Create(e, positions[i], rot, go => { Register(go, e); if (empty) Contents.Empty(go, e); });
             }
         }
 

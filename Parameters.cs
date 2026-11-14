@@ -63,6 +63,8 @@ namespace Apocaspawner
                 AddVariable(result, fsms, "Condition", new[] { "condition", "Condition" }, "Condition");
                 AddVariable(result, fsms, "Fuel", new[] { "fuel", "Fuel" }, "Condition");
                 AddVariable(result, fsms, "Capacity", new[] { "capacity", "Capacity" }, "Details");
+                var contents = Contents.Of(entry);
+                if (contents != null) AddNumber(result, contents.Label, contents.Full, "", "Details");
             }
             string weapon = WeaponName(go, entry.IsNpc, fsms);
             if (weapon != null)
