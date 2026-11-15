@@ -19,6 +19,7 @@ namespace Apocaspawner
         private string _search = "", _countText = "1", _distanceText, _status = "Select an entry to inspect it.";
         private int _count = 1;
         private Entry _selected;
+        private Contents.Info _contents;   // fill level of the selection, null when it is not a container
         private Texture2D _preview;
         private List<SpawnParameter> _parameters = new List<SpawnParameter>();
         private List<Entry> _catalog = new List<Entry>();
@@ -83,6 +84,7 @@ namespace Apocaspawner
         private void Select(Entry entry)
         {
             _selected = entry; _selections[Tab] = entry?.Key ?? ""; _parameterScroll = Vector2.zero;
+            _contents = Contents.Of(entry);
             _parameters = entry == null ? new List<SpawnParameter>() : Parameters.Read(entry);
             _preview = entry == null ? null : PreviewCache.GetOrCreate(Replacements.PreviewModel(entry));
             _nextParameters = Time.unscaledTime + 1;
@@ -103,7 +105,8 @@ namespace Apocaspawner
             distance = Mathf.Clamp(distance, .5f, 1000f); _count = Mathf.Clamp(count, 1, 50);
             _distanceText = distance.ToString("0.##", CultureInfo.InvariantCulture); _countText = _count.ToString();
             SpawnerPlugin.SpawnDistance.Value = distance;
-            try { Spawner.Spawn(_selected, _count); _status = _selected.IsPortableRadio ? "Retrieved your Portable Radio at " + _distanceText + " m." : "Spawned " + _count + " × " + _selected.Display + " at " + _distanceText + " m."; }
+            bool empty = _contents != null && SpawnerPlugin.SpawnEmpty.Value;
+            try { Spawner.Spawn(_selected, _count, empty); _status = _selected.IsPortableRadio ? "Retrieved your Portable Radio at " + _distanceText + " m." : "Spawned " + _count + " × " + (empty ? "empty " : "") + _selected.Display + " at " + _distanceText + " m."; }
             catch (Exception e) { _status = "Spawn failed: " + e.Message; SpawnerPlugin.Log.LogError(e); }
         }
         private void OnGUI()
@@ -233,9 +236,18 @@ namespace Apocaspawner
         {
             const float y = Height - 100;
             SpawnerSkin.Rule(6, y - 10, Width - 12);
-            SpawnerSkin.Label(new Rect(26, y, 485, 74), _status, SpawnerSkin.Small, SpawnerSkin.Muted);
-            SpawnerSkin.Panel(new Rect(Width - 541, y, 515, 74), new Color(23 / 255f, 19 / 255f, 13 / 255f, .91f));
-            const float distanceX = Width - 523, countX = Width - 357, spawnX = Width - 198;
+            SpawnerSkin.Label(new Rect(26, y, 395, 74), _status, SpawnerSkin.Small, SpawnerSkin.Muted);
+            SpawnerSkin.Panel(new Rect(Width - 681, y, 655, 74), new Color(23 / 255f, 19 / 255f, 13 / 255f, .91f));
+            const float contentsX = Width - 663, distanceX = Width - 523, countX = Width - 357, spawnX = Width - 198;
+            SpawnerSkin.Label(new Rect(contentsX, y + 8, 128, 18), "Contents", SpawnerSkin.Small, SpawnerSkin.Muted);
+            if (_contents == null)
+                SpawnerSkin.Label(new Rect(contentsX, y + 32, 128, 30), "Not a container", SpawnerSkin.Small, SpawnerSkin.Muted);
+            else
+            {
+                bool empty = SpawnerPlugin.SpawnEmpty.Value;
+                if (SpawnerSkin.Button(new Rect(contentsX, y + 32, 62, 30), "Full", primary: !empty)) { GUI.FocusControl(null); SpawnerPlugin.SpawnEmpty.Value = false; }
+                if (SpawnerSkin.Button(new Rect(contentsX + 66, y + 32, 62, 30), "Empty", primary: empty)) { GUI.FocusControl(null); SpawnerPlugin.SpawnEmpty.Value = true; }
+            }
             SpawnerSkin.Label(new Rect(distanceX, y + 8, 164, 18), "Spawn distance · global", SpawnerSkin.Small, SpawnerSkin.Muted);
             GUI.SetNextControlName("Spawner.Distance");
             string next = GUI.TextField(new Rect(distanceX, y + 32, 125, 30), _distanceText ?? "10", SpawnerSkin.Input);
