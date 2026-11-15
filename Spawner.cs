@@ -133,7 +133,7 @@ namespace Apocaspawner
         private static GameObject _player;
         private static readonly Regex CloneRx = new Regex(@"\(Clone\)\d*$|\s\(\d+\)$");
 
-        public static void Invalidate() { _entries = null; _player = null; GameMenu.Invalidate(); Parameters.Invalidate(); }
+        public static void Invalidate() { _entries = null; _player = null; GameMenu.Invalidate(); Parameters.Invalidate(); Contents.Invalidate(); }
 
         // ---- logical grouping of the game's ID strings ----
         private static readonly Dictionary<string, string> GroupById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -393,7 +393,8 @@ namespace Apocaspawner
 
         public static void Spawn(Entry e, int count = 1, bool empty = false)
         {
-            empty = empty && Contents.Applies(e);
+            // containers are always set explicitly: "full" means their capacity, which some prefabs (the stove) do not hold
+            bool container = Contents.Of(e) != null;
             if (e.IsPortableRadio)
             {
                 var owner = Catalog.Player;
@@ -437,15 +438,15 @@ namespace Apocaspawner
                 for (int i = 0; i < count; i++)
                 {
                     var go = GarageBridge.Spawn(e, positions[i], e.GarageKind == GarageBridge.KindCar ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation);
-                    if (empty) Contents.Empty(go, e);
+                    if (container) Contents.Apply(go, e, empty);
                 }
                 return;
             }
             for (int i = 0; i < count; i++)
             {
                 var rot = e.IsVehicle || e.IsNpc ? Quaternion.LookRotation(fwd) : UnityEngine.Random.rotation;
-                // emptied while still inactive in staging, so no start state ever sees the full amount
-                Placement.Create(e, positions[i], rot, go => { Register(go, e); if (empty) Contents.Empty(go, e); });
+                // filled/emptied while still inactive in staging, so no start state ever sees the prefab amount
+                Placement.Create(e, positions[i], rot, go => { Register(go, e); if (container) Contents.Apply(go, e, empty); });
             }
         }
 
